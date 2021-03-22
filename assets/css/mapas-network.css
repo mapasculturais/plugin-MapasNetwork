@@ -1,0 +1,12 @@
+.plug {
+    height: 12px;
+    width: 12px;
+    color: #000000;
+    font-size: 12px;
+    letter-spacing: 0;
+    line-height: 12px;
+}
+
+.plug::after {
+    content: "\1f50c";
+}
