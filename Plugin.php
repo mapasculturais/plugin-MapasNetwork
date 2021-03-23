@@ -16,7 +16,7 @@ class Plugin extends \MapasCulturais\Plugin
         $app = App::i();
         $driver = $app->em->getConfiguration()->getMetadataDriverImpl();
         $driver->addPaths([__DIR__]);
-        $app->hook("panel.menu:before", function () {
+        $app->hook("template(<<*>>.nav.panel.apps):before", function () {
             $this->part("network-node/panel-mapas-network-sidebar.php");
             return;
         });
@@ -28,6 +28,9 @@ class Plugin extends \MapasCulturais\Plugin
             $app->view->enqueueScript("app", "ng.mapas-network",
                                       "js/ng.mapas-network.js",
                                       ["mapasculturais"]);
+            $app->view->enqueueScript("app", "mapas-network",
+                                      "js/mapas-network.js",
+                                      ["mapasculturais"]);
             return;
         });
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
@@ -35,13 +38,27 @@ class Plugin extends \MapasCulturais\Plugin
                                      "css/mapas-network.css");
             return;
         });
+
+        $dir = self::getPrivatePath();
+        if (!is_dir($dir)) {
+            mkdir($dir);
+        }
+
         return;
     }
 
     function register()
     {
-        App::i()->registerController("network-node",
+        $app = App::i();
+        $app->registerController("network-node",
                                      "\\MapasNetwork\\NodeController");
+
         return;
+    }
+
+    static function getPrivatePath ()
+    {
+        // @todo: colocar numa configuração
+        return PRIVATE_FILES_PATH . 'mapas-network-keys/';
     }
 }

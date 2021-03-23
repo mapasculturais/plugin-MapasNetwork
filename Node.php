@@ -2,6 +2,10 @@
 namespace MapasNetwork;
 
 use Doctrine\ORM\Mapping as ORM;
+use MapasCulturais\App;
+use MapasCulturais\i;
+use MapasSDK\MapasSDK;
+
 //use MapasCulturais\App;
 
 /**
@@ -13,6 +17,10 @@ use Doctrine\ORM\Mapping as ORM;
  * @property-read \DateTime $createTimestamp
  * @property int $status
  *
+ * @property-read \DateTime $createTimestamp
+ * 
+ * @property-read MapasSDK $api
+ * 
  * @ORM\Table(name="network_node")
  * @ORM\Entity
  * @ORM\entity(repositoryClass="MapasCulturais\Repository")
@@ -38,6 +46,16 @@ class Node extends \MapasCulturais\Entity
     protected $url;
 
     /**
+     * @var \MapasCulturais\Entities\User
+     *
+     * @ORM\ManyToOne(targetEntity="MapasCulturais\Entities\User", fetch="LAZY")
+     * @ORM\JoinColumns({
+     *   @ORM\JoinColumn(name="user_id", referencedColumnName="id", onDelete="CASCADE")
+     * })
+     */
+    protected $user;
+
+    /**
      * @var \DateTime
      *
      * @ORM\Column(name="create_timestamp", type="datetime", nullable=false)
@@ -49,19 +67,93 @@ class Node extends \MapasCulturais\Entity
      *
      * @ORM\Column(name="status", type="integer", nullable=false)
      */
-    protected $status;
+    protected $status = 1;
+
+    function __construct() {
+        $app = App::i();
+        $this->user = $app->user;
+
+        parent::__construct();
+    }
 
     /**
-     * @var \MapasCulturais\Entities\User
-     *
-     * @ORM\ManyToOne(targetEntity="MapasCulturais\Entities\User", fetch="LAZY")
-     * @ORM\JoinColumns({
-     *   @ORM\JoinColumn(name="user_id", referencedColumnName="id", onDelete="CASCADE")
-     * })
+     * @return string|null
      */
-    protected $user;
+    protected function key() 
+    {
+        $folder = Plugin::getPrivatePath();
+        $key_filename = $folder . sha1("key:{$this->url}:{$this->user->id}");
+        
+        return file_exists($key_filename) ? file_get_contents($key_filename) : null;        
+    }
 
+    function setKeyPair(string $public, string $private) 
+    {
+        $this->checkPermission('setKeys');
+        
+        $folder = Plugin::getPrivatePath();
+        $key_filename = $folder . sha1("key:{$this->url}:{$this->user->id}");
+        $pair_filename = $folder. sha1("pair:{$this->url}:{$this->user->id}");
 
+        $key = openssl_random_pseudo_bytes(64);
+        file_put_contents($key_filename, $key);
+
+        $decrypted = json_encode([$private, $public]);
+        $encrypted = openssl_encrypt($decrypted,"AES-128-ECB",$key);
+        file_put_contents($pair_filename,$encrypted);
+
+    }
+
+    protected function _getKeyPair() 
+    {
+        $this->checkPermission('viewKeys');
+        $folder = Plugin::getPrivatePath();
+
+        $key = $this->key();
+        $pair_filename = $folder. sha1("pair:{$this->url}:{$this->user->id}");
+        
+        if($key && file_exists($pair_filename)) {
+            $encrypted = file_get_contents($pair_filename);
+            $key_json = openssl_decrypt($encrypted, "AES-128-ECB", $key);
+            return json_decode($key_json);   
+        }
+    }
+
+    protected function _getPrivateKey () 
+    {
+        $pair = $this->_getKeyPair();
+        return $pair[0];
+    }
+
+    protected function _getPublicKey () 
+    {
+        $pair = $this->_getKeyPair();
+        return $pair[1];
+    }
+
+    protected $_sdk = null;
+
+    /**
+     * @return MapasSDK
+     */
+    function getApi ()
+    {
+        if(!$this->_sdk) {
+            $this->_sdk = new MapasSDK($this->url, $this->_getPublicKey(), $this->_getPrivateKey());
+        }
+
+        return $this->_sdk;
+    }
+
+    protected function canUserViewKeys($user) 
+    {
+        return $this->user->id == $user->id;
+    }
+
+    protected function canUserSetKeys($user) 
+    {
+        return $this->user->id == $user->id;
+    }
 
     //============================================================= //
     // The following lines are used by MapasCulturais hook system.
