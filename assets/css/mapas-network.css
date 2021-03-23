@@ -10,3 +10,179 @@
 .plug::after {
     content: "\1f50c";
 }
+
+.network-container {
+    margin: 60px auto;
+}
+
+.network-container header {
+    margin-bottom: 30px;
+    overflow: hidden;
+    text-align: center;
+}
+
+.network-container header h1 {
+    font-size: 26px;
+    font-weight: bold;
+}
+
+.network-container header .icon {
+    display: inline-block;
+    margin: 0 auto  30px;
+}
+
+.network-container header .icon i {
+    color: #666666;
+    transform: rotate(45deg);
+}
+
+.network-container .card {
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px 0 rgba(0,0,0,0.3);
+    margin: 30px auto 60px;
+    max-width: 370px;
+    padding: 30px;
+}
+
+.network-container .card > p {
+    font-family: "aleo", serif;
+    line-height: 1.5rem;
+    text-align: center;
+}
+
+.network-container .card .integration {
+    display: flex;
+    padding: 40px 0 60px;
+}
+
+.network-container .card .integration .roadmap {
+    margin-right: 25px;
+    overflow: hidden;
+    position: relative;
+    width: 32px;
+}
+
+.network-container .card .integration .top {
+    background-color: #ffffff;
+    border: 2px solid #1C5690;
+    border-radius: 50px;
+    height: 13px;
+    left: 7px;
+    position: absolute;
+    top: 12px;
+    width: 13px;
+}
+
+.network-container .card .integration .line {
+    border-left: 2px dashed #1C5690;
+    height: 60%;
+    margin: 25px auto;
+    width: 1px;
+}
+
+.network-container .card .integration .icon {
+    background-color: #1C5690;
+    bottom: 20px;
+    border-radius: 50px;
+    box-sizing: border-box;
+    height: 31px;
+    left: 0;
+    padding: 6px 9px;
+    position: absolute;
+    width: 31px;
+}
+
+.network-container .card .integration .icon i {
+    color: #ffffff;
+    transform: rotate(45deg);
+}
+
+.network-container .card .integration .agent {
+    border-bottom: 1px solid #DDDDDD;
+    display: flex;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+}
+
+.network-container .card .integration .agent:last-child {
+    border: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.network-container .card .integration .agent .thumb {
+    height: auto;
+    margin-right: 20px;
+    max-width: 45px;
+}
+
+.network-container .card .integration .agent p {
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.network-container .card .integration .agent a {
+    color: #1C5690;
+    font-size: 14px;
+}
+
+.network-container .card footer {
+    display: flex;
+    justify-content: space-between;
+}
+
+.network-container .card footer button {
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: "aleo", serif;
+    font-size: 16px;
+    font-weight: bold;
+    height: auto;
+    padding: 16px 48px;
+    transition: all .2s ease-in-out;
+}
+
+.network-container .card footer button:hover {
+    opacity: 0.8;
+}
+
+.network-container .card footer button:first-child {
+    background-color: #DDDDDD;
+    color: #333333;
+}
+
+.network-container .card footer button:last-child {
+    background-color: #1C5690;
+    color: #ffffff;
+}
+
+@media (max-width: 380px) {
+    .network-container .card {
+        padding: 30px 15px;
+    }
+
+    .network-container .card .integration .roadmap {
+        margin-right: 10px;
+    }
+
+    .network-container .card .integration .agent .thumb {
+        margin-right: 10px;
+    }
+
+    .network-container .card footer {
+        display: block;
+        text-align: center;
+    }
+
+    .network-container .card footer button {
+        padding: 16px 40px;
+    }
+}
+
+@media (max-width: 599px) {
+    .network-container .card footer button {
+        padding: 16px 40px;
+    }
+}

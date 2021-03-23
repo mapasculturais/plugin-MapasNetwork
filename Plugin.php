@@ -31,6 +31,8 @@ class Plugin extends \MapasCulturais\Plugin
             $app->view->enqueueScript("app", "mapas-network",
                                       "js/mapas-network.js",
                                       ["mapasculturais"]);
+            $app->view->enqueueStyle("app", "mapas-network",
+                                      "css/mapas-network.css");
             return;
         });
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
