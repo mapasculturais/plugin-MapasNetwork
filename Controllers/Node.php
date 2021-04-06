@@ -1,14 +1,15 @@
 <?php
 
-namespace MapasNetwork;
+namespace MapasNetwork\Controllers;
 
 use MapasCulturais\App;
 use MapasCulturais\Entities\UserApp;
 use MapasCulturais\i;
 use MapasCulturais\Traits;
 use MapasSDK\MapasSDK;
+use MapasNetwork\Entities as NodeEntities;
 
-class NodeController extends \MapasCulturais\Controller
+class Node extends \MapasCulturais\Controller
 {
     use Traits\ControllerAPI;
 
@@ -34,7 +35,7 @@ class NodeController extends \MapasCulturais\Controller
     {
         $this->requireAuthentication();
         $app = App::i();
-        $nodeRepo = $app->repo("\\MapasNetwork\\Node");
+        $nodeRepo = $app->repo(NodeEntities\Node::class);
         $this->render("panel-mapas-network-main", [
             "nodes" => $nodeRepo->findBy(["user" => $app->user]),
         ]);
@@ -239,5 +240,11 @@ class NodeController extends \MapasCulturais\Controller
         $node->save(true);
 
         $node->setKeyPair($public_key, $private_key);
+    }
+
+    function POST_createdEntity() {
+        $this->requireAuthentication();
+
+        eval(\psy\sh());
     }
 }

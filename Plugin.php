@@ -1,11 +1,13 @@
 <?php
+
 namespace MapasNetwork;
 
 use MapasCulturais\App;
-
+use MapasCulturais\Entity;
+use MapasCulturais\i;
 class Plugin extends \MapasCulturais\Plugin
 {
-    function __construct(array $config=[])
+    function __construct(array $config = [])
     {
         parent::__construct($config);
         return;
@@ -14,8 +16,7 @@ class Plugin extends \MapasCulturais\Plugin
     function _init()
     {
         $app = App::i();
-        $driver = $app->em->getConfiguration()->getMetadataDriverImpl();
-        $driver->addPaths([__DIR__]);
+
         $app->hook("template(<<*>>.nav.panel.apps):before", function () {
             $this->part("network-node/panel-mapas-network-sidebar.php");
             return;
@@ -52,8 +53,9 @@ class Plugin extends \MapasCulturais\Plugin
     function register()
     {
         $app = App::i();
-        $app->registerController("network-node",
-                                     "\\MapasNetwork\\NodeController");
+
+        $app->registerController("network-node", "\\MapasNetwork\\Controllers\\Node");
+
 
         return;
     }
