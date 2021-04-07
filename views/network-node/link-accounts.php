@@ -46,8 +46,12 @@ $this->layout = 'nolayout'; ?>
         </div>
 
         <footer>
-            <button>Cancelar</button>
-            <button>Confirmar</button>
+	        <a href="<?php echo $this->controller->createUrl('cancelAccountLink'); ?>">
+		        <button>Cancelar</button>
+	        </a>
+	        <a href="<?php echo $this->controller->createUrl('confirmLinkAccount'); ?>">
+		        <button>Confirmar</button>
+	        </a>
         </footer>
     </div>
 
