@@ -6,6 +6,11 @@ use MapasCulturais\App;
 use MapasCulturais\Entities\UserApp;
 use MapasCulturais\i;
 use MapasCulturais\Traits;
+
+use MapasCulturais\Entities\Agent;
+use MapasCulturais\Entities\Space;
+use MapasCulturais\Entities\Event;
+use MapasCulturais\Exceptions\PermissionDenied;
 use MapasSDK\MapasSDK;
 use MapasNetwork\Entities as NodeEntities;
 
@@ -13,9 +18,13 @@ class Node extends \MapasCulturais\Controller
 {
     use Traits\ControllerAPI;
 
+    public $plugin;
+
     function __construct()
     {
         $this->layout = "mapas-network";
+
+        $this->plugin = App::i()->plugins['MapasNetwork'];
         return;
     }
 
@@ -187,7 +196,7 @@ class Node extends \MapasCulturais\Controller
             if ($connect_secret) {
                 $keys = json_decode(file_get_contents("{$connect_from}{$this->id}/getKeys?token={$connect_token}&s=$connect_secret"));
 
-                $node = new Node;
+                $node = new NodeEntities\Node;
                 $node->url = $connect_from;
                 $node->status = 1;
                 $node->save(true);
@@ -234,7 +243,7 @@ class Node extends \MapasCulturais\Controller
         $public_key = $this->postData['publicKey'];
         $private_key = $this->postData['privateKey'];
 
-        $node = new Node;
+        $node = new NodeEntities\Node;
         $node->url = $connect_from;
         $node->status = 1;
         $node->save(true);
@@ -245,6 +254,59 @@ class Node extends \MapasCulturais\Controller
     function POST_createdEntity() {
         $this->requireAuthentication();
 
-        eval(\psy\sh());
+        $app = App::i();
+
+        $node_slug = $this->postData['nodeSlug'];
+        $class_name = $this->postData['className'];
+        $data = $this->postData['data'];
+        $revision = $this->postData['revision'];
+        
+               
+
+        if (isset($data[$this->plugin->entityMetadataKey])) {
+            $this->json('ok');
+            return;
+        }
+
+
+        foreach($data['networkRevisions'] as $revision) {
+            if(strpos($revision, $this->plugin->nodeSlug) === 0) {
+                $this->json('ok');
+                return;
+            }
+        }
+
+        $classes = [
+            Agent::class,
+            Space::class,
+            Event::class
+        ]; 
+        
+        if(!in_array($class_name, $classes)){
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user, 'create');
+        }
+
+        $entity = new $class_name;
+
+        $skip_fields = [
+            'id',
+            'parent',
+            'owner',
+            'user',
+            'userId',
+            'createTimestamp',
+            'updateTimestamp'
+        ];
+
+        foreach ($data as $key => $val) {
+            if(in_array($key, $skip_fields)) {
+                continue;
+            }
+
+            $entity->$key = $val;
+        }
+
+        $entity->save(true);
     }
 }
