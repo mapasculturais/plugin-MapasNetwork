@@ -49,9 +49,6 @@ class Node extends \MapasCulturais\Controller
 
         $originName = $_SESSION['mapas-network:name'];
 
-
-        //eval(\psy\sh());
-
         $this->render("link-accounts", [
             'origin_name' => $originName,
         ]);
