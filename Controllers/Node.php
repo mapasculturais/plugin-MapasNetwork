@@ -2,6 +2,7 @@
 
 namespace MapasNetwork\Controllers;
 
+use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entities\UserApp;
 use MapasCulturais\i;
@@ -256,36 +257,29 @@ class Node extends \MapasCulturais\Controller
 
         $app = App::i();
 
-        $node_slug = $this->postData['nodeSlug'];
         $class_name = $this->postData['className'];
+        $network_id = $this->postData['networkId'];
         $data = $this->postData['data'];
-        $revision = $this->postData['revision'];
-        
-               
-
-        if (isset($data[$this->plugin->entityMetadataKey])) {
-            $this->json('ok');
-            return;
-        }
-
-
-        foreach($data['networkRevisions'] as $revision) {
-            if(strpos($revision, $this->plugin->nodeSlug) === 0) {
-                $this->json('ok');
-                return;
-            }
-        }
 
         $classes = [
             Agent::class,
             Space::class,
-            Event::class
         ]; 
         
         if(!in_array($class_name, $classes)){
             // @todo arrumar esse throw
             throw new PermissionDenied($app->user, $app->user, 'create');
         }
+
+        $query = new ApiQuery($class_name, ['networkId' => "EQ({$network_id})" ]);
+
+        if($query->findIds()) {
+            $app->log->debug("$network_id already exists");
+            $this->json("$network_id already exists");
+            return;
+        }
+        
+        $app->log->debug("creating $network_id");
 
         $entity = new $class_name;
 
