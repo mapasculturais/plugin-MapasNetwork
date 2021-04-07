@@ -1,20 +1,30 @@
 <?php
 
-namespace MapasNetwork;
+namespace MapasNetwork\Controllers;
 
 use MapasCulturais\App;
 use MapasCulturais\Entities\UserApp;
 use MapasCulturais\i;
 use MapasCulturais\Traits;
-use MapasSDK\MapasSDK;
 
-class NodeController extends \MapasCulturais\Controller
+use MapasCulturais\Entities\Agent;
+use MapasCulturais\Entities\Space;
+use MapasCulturais\Entities\Event;
+use MapasCulturais\Exceptions\PermissionDenied;
+use MapasSDK\MapasSDK;
+use MapasNetwork\Entities as NodeEntities;
+
+class Node extends \MapasCulturais\Controller
 {
     use Traits\ControllerAPI;
+
+    public $plugin;
 
     function __construct()
     {
         $this->layout = "mapas-network";
+
+        $this->plugin = App::i()->plugins['MapasNetwork'];
         return;
     }
 
@@ -54,7 +64,7 @@ class NodeController extends \MapasCulturais\Controller
     {
         $this->requireAuthentication();
         $app = App::i();
-        $nodeRepo = $app->repo("\\MapasNetwork\\Node");
+        $nodeRepo = $app->repo(NodeEntities\Node::class);
         $this->render("panel-mapas-network-main", [
             "nodes" => $nodeRepo->findBy(["user" => $app->user]),
         ]);
@@ -83,8 +93,8 @@ class NodeController extends \MapasCulturais\Controller
     function checkTokenSecret($token, $secret, $verify_user = false) {
         $app = App::i();
 
-        return ($verifier = $app->cache->fetch("{$token}:verifier")) && 
-                $verifier->secret === $secret && 
+        return ($verifier = $app->cache->fetch("{$token}:verifier")) &&
+                $verifier->secret === $secret &&
                 (!$verify_user || $verifier->userId === $app->user->id);
     }
 
@@ -104,11 +114,11 @@ class NodeController extends \MapasCulturais\Controller
 
     /**
      * Verifica o token e, caso válido, retorna o segredo.
-     * 
+     *
      * Um token só é válido uma única vez e caso haja uma segunda tentativa de verificar,
      * o verificador que contém o segredo é apagado.
      */
-    function GET_verifyConnectionToken() 
+    function GET_verifyConnectionToken()
     {
         $app = App::i();
         $token = $this->data['token'] ?? null;
@@ -131,7 +141,7 @@ class NodeController extends \MapasCulturais\Controller
         }
     }
 
-    function GET_connect() 
+    function GET_connect()
     {
         $app = App::i();
 
@@ -157,23 +167,23 @@ class NodeController extends \MapasCulturais\Controller
 
         if ($connect_to && $create_token) {
             $connect_token = $this->createToken();
-            
+
             // verifica o token e recebe o segredo que será enviado no retorno
             $create_secret = file_get_contents("{$connect_to}{$this->id}/verifyConnectionToken?token={$create_token}&returnToken={$connect_token}");
-            
+
             if ($create_secret) {
                 // cria o App
                 $user_app = new UserApp;
                 $user_app->name = i::__('Rede Mapas') . ": {$name} ({$connect_to})";
                 $user_app->save(true);
-                
+
                 $app->log->debug("user app criado: {$user_app->name}");
 
                 $app->cache->save("{$connect_token}:userAppId", $user_app->id, 300);
 
                 $site_name = urlencode(base64_encode($app->siteName));
 
-                $app->redirect("{$connect_to}{$this->id}/return?from={$app->baseUrl}&token={$create_token}&s={$create_secret}&returnToken={$connect_token}&name={$site_name}");                
+                $app->redirect("{$connect_to}{$this->id}/return?from={$app->baseUrl}&token={$create_token}&s={$create_secret}&returnToken={$connect_token}&name={$site_name}");
             }
         }
     }
@@ -205,12 +215,12 @@ class NodeController extends \MapasCulturais\Controller
         );
 
         if ($connect_token && $this->checkTokenSecret($create_token, $create_secret, true)) {
-            
+
             $connect_secret = file_get_contents("{$connect_from}{$this->id}/verifyConnectionToken?token={$connect_token}");
             if ($connect_secret) {
                 $keys = json_decode(file_get_contents("{$connect_from}{$this->id}/getKeys?token={$connect_token}&s=$connect_secret"));
 
-                $node = new Node;
+                $node = new NodeEntities\Node;
                 $node->url = $connect_from;
                 $node->status = 1;
                 $node->save(true);
@@ -223,7 +233,7 @@ class NodeController extends \MapasCulturais\Controller
                 $user_app->save(true);
 
                 $node->api->apiPost("{$this->id}/finish", [
-                    'publicKey' => $user_app->getPublicKey(), 
+                    'publicKey' => $user_app->getPublicKey(),
                     'privateKey' => $user_app->getPrivateKey(),
                     'connecto_to' => $app->baseUrl,
                     'name' => $app->siteName
@@ -257,7 +267,7 @@ class NodeController extends \MapasCulturais\Controller
         $public_key = $this->postData['publicKey'];
         $private_key = $this->postData['privateKey'];
 
-        $node = new Node;
+        $node = new NodeEntities\Node;
         $node->url = $connect_from;
         $node->status = 1;
         $node->save(true);
@@ -280,5 +290,64 @@ class NodeController extends \MapasCulturais\Controller
         //eval(\psy\sh());
 
         $app->redirect($url);
+    }
+    
+    function POST_createdEntity() {
+        $this->requireAuthentication();
+
+        $app = App::i();
+
+        $node_slug = $this->postData['nodeSlug'];
+        $class_name = $this->postData['className'];
+        $data = $this->postData['data'];
+        $revision = $this->postData['revision'];
+
+
+
+        if (isset($data[$this->plugin->entityMetadataKey])) {
+            $this->json('ok');
+            return;
+        }
+
+
+        foreach($data['networkRevisions'] as $revision) {
+            if(strpos($revision, $this->plugin->nodeSlug) === 0) {
+                $this->json('ok');
+                return;
+            }
+        }
+
+        $classes = [
+            Agent::class,
+            Space::class,
+            Event::class
+        ];
+
+        if(!in_array($class_name, $classes)){
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user, 'create');
+        }
+
+        $entity = new $class_name;
+
+        $skip_fields = [
+            'id',
+            'parent',
+            'owner',
+            'user',
+            'userId',
+            'createTimestamp',
+            'updateTimestamp'
+        ];
+
+        foreach ($data as $key => $val) {
+            if(in_array($key, $skip_fields)) {
+                continue;
+            }
+
+            $entity->$key = $val;
+        }
+
+        $entity->save(true);
     }
 }

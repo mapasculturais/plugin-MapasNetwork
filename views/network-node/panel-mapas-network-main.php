@@ -1,10 +1,11 @@
 <?php
 use MapasCulturais\i;
 $this->layout = "panel";
-$entity_name = "\\MapasNetwork\\Node";
+$entity_name = "MapasNetwork\\Entities\\Node";
 $name = i::__("vínculo");
 $modal_id = "add-network-node";
 $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
+
 ?>
 <div class="panel-list panel-main-content">
 <?php $this->applyTemplateHook("panel-header", "before"); ?>

@@ -1,11 +1,11 @@
 <?php
-namespace MapasNetwork;
+namespace MapasNetwork\Entities;
 
 use Doctrine\ORM\Mapping as ORM;
 use MapasCulturais\App;
 use MapasCulturais\i;
 use MapasSDK\MapasSDK;
-
+use MapasNetwork\Plugin;
 //use MapasCulturais\App;
 
 /**
@@ -14,6 +14,7 @@ use MapasSDK\MapasSDK;
  * @property-read int $id
  * @property \MapasCulturais\Entities\User $user the user whose account this node links to another installation
  * @property string $url the base URL of the node
+ * @property-read string $entityMetadataKey
  * @property-read \DateTime $createTimestamp
  * @property int $status
  *
@@ -143,6 +144,18 @@ class Node extends \MapasCulturais\Entity
         }
 
         return $this->_sdk;
+    }
+
+    function getEntityMetadataKey() {
+        // @todo trocar por slug do nó
+        $slug = $this->slug;
+
+        return "network_{$slug}_entity_id";
+    }
+
+    function getSlug() {
+        // @todo trocar pelo slug do nó
+        return md5($this->url);;
     }
 
     protected function canUserViewKeys($user) 
