@@ -2,6 +2,7 @@
 
 namespace MapasNetwork\Controllers;
 
+use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entities\UserApp;
 use MapasCulturais\i;
@@ -290,14 +291,14 @@ class Node extends \MapasCulturais\Controller
 
         $app->redirect($url);
     }
-    
+
     function POST_createdEntity() {
         $this->requireAuthentication();
 
         $app = App::i();
 
-        $node_slug = $this->postData['nodeSlug'];
         $class_name = $this->postData['className'];
+        $network_id = $this->postData['networkId'];
         $data = $this->postData['data'];
         $revision = $this->postData['revision'];
 
@@ -326,6 +327,16 @@ class Node extends \MapasCulturais\Controller
             // @todo arrumar esse throw
             throw new PermissionDenied($app->user, $app->user, 'create');
         }
+
+        $query = new ApiQuery($class_name, ['networkId' => "EQ({$network_id})" ]);
+
+        if($query->findIds()) {
+            $app->log->debug("$network_id already exists");
+            $this->json("$network_id already exists");
+            return;
+        }
+
+        $app->log->debug("creating $network_id");
 
         $entity = new $class_name;
 

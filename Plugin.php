@@ -88,7 +88,10 @@ class Plugin extends \MapasCulturais\Plugin
             }
         });
 
-        $app->hook('entity(<<Agent|Space|Event>>).get(networkId)', function (&$value) use($plugin) {
+
+        $entities_hook_prefix = 'entity(<<Agent|Space>>)';
+
+        $app->hook("{$entities_hook_prefix}.get(networkRevisionPrefix)", function (&$value) use($plugin) {
             $slug = $plugin->nodeSlug;
             
             $entity_id = str_replace('MapasCulturais\\Entities\\', '', (string) $this);
@@ -97,22 +100,27 @@ class Plugin extends \MapasCulturais\Plugin
             $value = "{$slug}:$entity_id";
         });
 
-        $app->hook('entity(<<Agent|Space|Event>>).<<insert|update>>:before', function () use($plugin, $app) {
+        $app->hook("{$entities_hook_prefix}.update:before", function () use($plugin, $app) {
             $uid = uniqid('',true);
 
             $revisions = $this->networkRevisions;
-            $revisions[] = "{$this->networkId}:{$uid}";
+            $revisions[] = "{$this->networkRevisionPrefix}:{$uid}";
 
             $this->networkRevisions = $revisions;
         });
 
-        $app->hook('entity(<<Agent|Space|Event>>).insert:after', function () use($plugin, $app) {
-            $metadata_key = $plugin->entityMetadataKey;
-            $this->$metadata_key = $this->id;
+        $app->hook("{$entities_hook_prefix}.insert:before", function () use($plugin, $app) {
+            if (!$this->networkId) {
+                $uid = uniqid('',true);
+                
+                $this->networkId = "{$this->networkRevisionPrefix}:{$uid}";
+            }
         });
 
-        // na criação de 
-        $app->hook('entity(<<Agent|Space|Event>>).insert:after', function () use($plugin) {
+        $app->hook("{$entities_hook_prefix}.insert:after", function () use($plugin, $app) {
+            $metadata_key = $plugin->entityMetadataKey;
+            $this->$metadata_key = $this->id;
+
             $plugin->syncCreatedEntity($this);
         });
 
@@ -134,7 +142,15 @@ class Plugin extends \MapasCulturais\Plugin
 
         $this->registerAgentMetadata('networkRevisions', $revisions_metadata);
         $this->registerSpaceMetadata('networkRevisions', $revisions_metadata);
-        $this->registerEventMetadata('networkRevisions', $revisions_metadata);
+
+        $network_id_metadata = [
+            'label' => i::__('Id da entidade na rede de mapas', 'mapas-network'),
+            'type' => 'string',
+            'private' => true
+        ];
+
+        $this->registerAgentMetadata('networkId', $network_id_metadata);
+        $this->registerSpaceMetadata('networkId', $network_id_metadata);
 
         return;
     }
@@ -190,19 +206,14 @@ class Plugin extends \MapasCulturais\Plugin
 
         $nodes = self::getEntityNodes($entity);
 
-        $revisions = $entity->networkRevisions;
-        $revision = end($revisions);
-
         foreach($nodes as $node) {
             $data = $entity->jsonSerialize();
-            if(isset($data[$node->entityMetadataKey])) {
-                continue;
-            }
+
             $data = [
                 'nodeSlug' => $this->nodeSlug,
                 'className' => $entity->getClassName(),
                 'data' => $data,
-                'revision' => $revision,
+                'networkId' => $entity->networkId
             ];
             // @todo rever o timeout. 1 segundo é muito
             try{
