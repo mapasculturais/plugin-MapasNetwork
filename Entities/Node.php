@@ -150,12 +150,12 @@ class Node extends \MapasCulturais\Entity
         // @todo trocar por slug do nó
         $slug = $this->slug;
 
-        return "network_{$slug}_entity_id";
+        return "network__{$slug}_entity_id";
     }
 
     function getSlug() {
         // @todo trocar pelo slug do nó
-        return md5($this->url);;
+        return str_replace('.', '', parse_url($this->url, PHP_URL_HOST));
     }
 
     protected function canUserViewKeys($user) 
