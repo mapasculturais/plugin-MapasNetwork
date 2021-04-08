@@ -74,8 +74,8 @@ class Node extends \MapasCulturais\Controller
     function checkTokenSecret($token, $secret, $verify_user = false) {
         $app = App::i();
 
-        return ($verifier = $app->cache->fetch("{$token}:verifier")) && 
-                $verifier->secret === $secret && 
+        return ($verifier = $app->cache->fetch("{$token}:verifier")) &&
+                $verifier->secret === $secret &&
                 (!$verify_user || $verifier->userId === $app->user->id);
     }
 
@@ -95,11 +95,11 @@ class Node extends \MapasCulturais\Controller
 
     /**
      * Verifica o token e, caso válido, retorna o segredo.
-     * 
+     *
      * Um token só é válido uma única vez e caso haja uma segunda tentativa de verificar,
      * o verificador que contém o segredo é apagado.
      */
-    function GET_verifyConnectionToken() 
+    function GET_verifyConnectionToken()
     {
         $app = App::i();
         $token = $this->data['token'] ?? null;
@@ -122,7 +122,7 @@ class Node extends \MapasCulturais\Controller
         }
     }
 
-    function GET_connect() 
+    function GET_connect()
     {
         $app = App::i();
 
@@ -137,30 +137,30 @@ class Node extends \MapasCulturais\Controller
         $this->requireAuthentication();
 
         unset(
-            $_SESSION['mapas-network:to'], 
+            $_SESSION['mapas-network:to'],
             $_SESSION['mapas-network:token'],
             $_SESSION['mapas-network:name']
         );
 
         if ($connect_to && $create_token) {
             $connect_token = $this->createToken();
-            
+
             // verifica o token e recebe o segredo que será enviado no retorno
             $create_secret = file_get_contents("{$connect_to}{$this->id}/verifyConnectionToken?token={$create_token}&returnToken={$connect_token}");
-            
+
             if ($create_secret) {
                 // cria o App
                 $user_app = new UserApp;
                 $user_app->name = i::__('Rede Mapas') . ": {$name} ({$connect_to})";
                 $user_app->save(true);
-                
+
                 $app->log->debug("user app criado: {$user_app->name}");
 
                 $app->cache->save("{$connect_token}:userAppId", $user_app->id, 300);
 
                 $site_name = urlencode(base64_encode($app->siteName));
 
-                $app->redirect("{$connect_to}{$this->id}/return?from={$app->baseUrl}&token={$create_token}&s={$create_secret}&returnToken={$connect_token}&name={$site_name}");                
+                $app->redirect("{$connect_to}{$this->id}/return?from={$app->baseUrl}&token={$create_token}&s={$create_secret}&returnToken={$connect_token}&name={$site_name}");
             }
         }
     }
@@ -192,7 +192,7 @@ class Node extends \MapasCulturais\Controller
         );
 
         if ($connect_token && $this->checkTokenSecret($create_token, $create_secret, true)) {
-            
+
             $connect_secret = file_get_contents("{$connect_from}{$this->id}/verifyConnectionToken?token={$connect_token}");
             if ($connect_secret) {
                 $keys = json_decode(file_get_contents("{$connect_from}{$this->id}/getKeys?token={$connect_token}&s=$connect_secret"));
@@ -200,20 +200,22 @@ class Node extends \MapasCulturais\Controller
                 $node = new NodeEntities\Node;
                 $node->url = $connect_from;
                 $node->status = 1;
+                $node->name = "$name ($connect_from)";
+                // cria o App
+                $user_app = new UserApp;
+                $user_app->name = i::__("Rede Mapas") . ": {$name} ({$connect_from})";
+                $user_app->save(true);
+                $node->userApp = $user_app;
                 $node->save(true);
 
                 $node->setKeyPair($keys[0], $keys[1]);
 
-                // cria o App
-                $user_app = new UserApp;
-                $user_app->name = i::__('Rede Mapas') . ": {$name} ({$connect_from})";
-                $user_app->save(true);
-
                 $node->api->apiPost("{$this->id}/finish", [
-                    'publicKey' => $user_app->getPublicKey(), 
-                    'privateKey' => $user_app->getPrivateKey(),
-                    'connecto_to' => $app->baseUrl,
-                    'name' => $app->siteName
+                    "token" => $connect_token,
+                    "publicKey" => $user_app->getPublicKey(),
+                    "privateKey" => $user_app->getPrivateKey(),
+                    "connect_to" => $app->baseUrl,
+                    "name" => $app->siteName
                 ]);
 
                 $app->redirect($this->createUrl('panel'));
@@ -238,15 +240,19 @@ class Node extends \MapasCulturais\Controller
     function POST_finish()
     {
         $this->requireAuthentication();
-
-        $connect_from = $this->postData['connecto_to'];
-        $site_name = $this->postData['name'];
-        $public_key = $this->postData['publicKey'];
-        $private_key = $this->postData['privateKey'];
+        $app = App::i();
+        $connect_from = $this->postData["connect_to"];
+        $site_name = $this->postData["name"];
+        $public_key = $this->postData["publicKey"];
+        $private_key = $this->postData["privateKey"];
+        $connect_token = $this->postData["token"];
 
         $node = new NodeEntities\Node;
         $node->url = $connect_from;
         $node->status = 1;
+        $node->name = "$site_name ($connect_from)";
+        $user_app_id = $app->cache->fetch("$connect_token:userAppId");
+        $node->userApp = $app->repo("UserApp")->find($user_app_id);
         $node->save(true);
 
         $node->setKeyPair($public_key, $private_key);
@@ -264,8 +270,8 @@ class Node extends \MapasCulturais\Controller
         $classes = [
             Agent::class,
             Space::class,
-        ]; 
-        
+        ];
+
         if(!in_array($class_name, $classes)){
             // @todo arrumar esse throw
             throw new PermissionDenied($app->user, $app->user, 'create');
@@ -278,7 +284,7 @@ class Node extends \MapasCulturais\Controller
             $this->json("$network_id already exists");
             return;
         }
-        
+
         $app->log->debug("creating $network_id");
 
         $entity = new $class_name;

@@ -36,7 +36,7 @@
             };
         }]);
 
-    app.controller("MapasNetworkController", ["$scope", "$rootScope", "$timeout", "MapasNetworkService", "EditBox", function ($scope, $rootScope, $timeout, PrestacaoDeContasService, EditBox) {
+    app.controller("MapasNetworkController", ["$scope", "$rootScope", "$timeout", "MapasNetworkService", "EditBox", function ($scope, $rootScope, $timeout, MapasNetworkService, EditBox) {
             var adjustingBoxPosition = false;
             $scope.editbox = EditBox;
             $scope.data = {
