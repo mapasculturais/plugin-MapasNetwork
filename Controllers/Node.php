@@ -52,6 +52,48 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
+    public function GET_delete()
+    {
+        $this->DELETE_single();
+        return;
+    }
+
+    public function DELETE_single()
+    {
+        $app = App::i();
+        $nodeRepo = $app->repo("MapasNetwork\\Entities\\Node");
+        $entity = null;
+        if (isset($this->data["id"])) { // original request
+            $entity = $nodeRepo->find($this->data["id"]);
+        } else { // API request (propagated); Mapas must expose the JWT authenticator's UserApp
+            $entity = $nodeRepo->findOneBy(["userApp" => $app->auth->userApp]);
+        }
+        if (!$entity) {
+            $app->pass();
+            return;
+        }
+        $entity->checkPermission("delete"); // UserApp has soft-delete, so we'll use the Node logic instead
+        if (isset($this->data["id"])) { // propagate the request via API
+            $entity->api->apiDelete("{$this->id}/single", []);
+        }
+        $single_url = $entity->singleUrl;
+        $app->disableAccessControl();
+        $entity->userApp->destroy(true);
+        $app->enableAccessControl();
+        if ($app->request->isAjax()) {
+            $this->json(true);
+        } else {
+            // e redireciona de volta para o referer
+            $redirect_url = $app->request->getReferer();
+            if ($redirect_url === $single_url) {
+                $redirect_url = $app->createUrl("panel");
+            }
+            $app->applyHookBoundTo($this, "DELETE({$this->id}):beforeRedirect", [$entity, &$redirect_url]);
+            $app->redirect($redirect_url);
+        }
+        return;
+    }
+
     function createToken() {
         $app = App::i();
 
