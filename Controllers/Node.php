@@ -35,9 +35,23 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
+    function GET_confirmLinkAccount()
+    {
+        $app = App::i();
+
+        $confirmed = $_SESSION['mapas-network:confirmed'] = true;
+
+        $app->redirect($this->createUrl('connect'));
+    }
+
     public function GET_linkAccounts()
     {
-        $this->render("link-accounts");
+
+        $originName = $_SESSION['mapas-network:name'];
+
+        $this->render("link-accounts", [
+            'origin_name' => $originName,
+        ]);
         return;
     }
 
@@ -168,15 +182,23 @@ class Node extends \MapasCulturais\Controller
     {
         $app = App::i();
 
-        $connect_to = $_SESSION['mapas-network:to'] ?? $this->data['to'] ?? null;
-        $create_token = $_SESSION['mapas-network:token'] ?? $this->data['token'] ?? null;
-        $name = $_SESSION['mapas-network:name'] ?? base64_decode($this->data['name'] ?? null) ?: $connect_to;
+        $connect_to = $this->data['to'] ?? $_SESSION['mapas-network:to'] ?? null;
+        $create_token = $this->data['token'] ?? $_SESSION['mapas-network:token'] ?? null;
+        $name = base64_decode($this->data['name'] ?? null) ?? $_SESSION['mapas-network:name'] ?: $connect_to;
+        $isConfirmed = $_SESSION['mapas-network:confirmed'] ?? null;
 
         $_SESSION['mapas-network:to'] = $connect_to;
         $_SESSION['mapas-network:token'] = $create_token;
         $_SESSION['mapas-network:name'] = $name;
+        $_SESSION['mapas-network:confirmed'] = $isConfirmed;
 
         $this->requireAuthentication();
+
+        // Verificar se já foi confirmado.
+        // Redirecionar caso ainda não esteja confirmado
+        if (!$isConfirmed) {
+            $app->redirect($this->createUrl('linkAccounts'));
+        }
 
         unset(
             $_SESSION['mapas-network:to'],
@@ -300,6 +322,21 @@ class Node extends \MapasCulturais\Controller
         $node->setKeyPair($public_key, $private_key);
     }
 
+    function GET_cancelAccountLink()
+    {
+        $app = App::i();
+
+        $url = $_SESSION['mapas-network:to'] . '/network-node/panel/';
+
+        unset(
+            $_SESSION['mapas-network:to'],
+            $_SESSION['mapas-network:token'],
+            $_SESSION['mapas-network:name']
+        );
+
+        $app->redirect($url);
+    }
+
     function POST_createdEntity() {
         $this->requireAuthentication();
 
@@ -309,6 +346,22 @@ class Node extends \MapasCulturais\Controller
         $class_name = $this->postData['className'];
         $network_id = $this->postData['network__id'];
         $data = $this->postData['data'];
+        $revision = $this->postData['revision'];
+
+
+
+        if (isset($data[$this->plugin->entityMetadataKey])) {
+            $this->json('ok');
+            return;
+        }
+
+
+        foreach($data['networkRevisions'] as $revision) {
+            if(strpos($revision, $this->plugin->nodeSlug) === 0) {
+                $this->json('ok');
+                return;
+            }
+        }
 
         $classes = [
             Agent::class,
