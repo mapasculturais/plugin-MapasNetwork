@@ -263,6 +263,7 @@ class Node extends \MapasCulturais\Controller
 
         $app = App::i();
 
+        $node_slug = $this->postData['nodeSlug'];
         $class_name = $this->postData['className'];
         $network_id = $this->postData['network__id'];
         $data = $this->postData['data'];
@@ -281,15 +282,22 @@ class Node extends \MapasCulturais\Controller
         // verifica se a entidade já existe para o usuário
         $query = new ApiQuery($class_name, ['network__id' => "EQ({$network_id})", 'user' => "EQ({$app->user->id})"]);
         if($ids = $query->findIds()) {
+            $id = $ids[0];
+
             /**
              * aproveita a requisição para atualizar o id da entidade no outro nó,
              * desta forma a propagação dos 
-             */
+             */            
+            $entity = $app->repo($class_name)->find($id);
+            
+            $entity->{"network__{$node_slug}_entity_id"} = $data['id'];
+            $entity->skipNetworkSync = true;
 
-            $id = 
+            $entity->save(true);
 
-            $app->log->debug("$network_id already exists");
+            $app->log->debug("$network_id already exists with id {$id}");
             $this->json("$network_id already exists with id {$id}");
+
             return;
         }
 

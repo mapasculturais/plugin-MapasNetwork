@@ -3,6 +3,8 @@
 namespace MapasNetwork;
 
 use MapasCulturais\App;
+use MapasCulturais\Definitions\JobType;
+use MapasCulturais\Entities\Job;
 use MapasCulturais\Entity;
 use MapasCulturais\i;
 
@@ -17,7 +19,7 @@ class Plugin extends \MapasCulturais\Plugin
         $app = App::i();
 
         $config += [
-            'nodeSlug' => str_replace('.', '', parse_url($app->baseUrl, PHP_URL_HOST)) 
+            'nodeSlug' => $_SERVER['HOSTNAME'] ?? str_replace('.', '', parse_url($app->baseUrl, PHP_URL_HOST)) 
         ];
         
         parent::__construct($config);
@@ -121,7 +123,11 @@ class Plugin extends \MapasCulturais\Plugin
             $metadata_key = $plugin->entityMetadataKey;
             $this->$metadata_key = $this->id;
 
-            $plugin->syncCreatedEntity($this);
+            $nodes = Plugin::getEntityNodes($this);
+
+            foreach($nodes as $node) {
+                $app->enqueueJob('sync_created_entity', ['entity' => $this, 'node' => $node, 'nodeSlug' => $node->slug]); 
+            }
         });
 
         return;
@@ -151,6 +157,11 @@ class Plugin extends \MapasCulturais\Plugin
 
         $this->registerAgentMetadata('network__id', $network_id_metadata);
         $this->registerSpaceMetadata('network__id', $network_id_metadata);
+
+
+        // background jobs
+        $sync_created_entity = new SyncCreatedEntityJob('sync_created_entity', $this);
+        $app->registerJobType($sync_created_entity);
 
         return;
     }
@@ -199,29 +210,5 @@ class Plugin extends \MapasCulturais\Plugin
         $app->applyHookBoundTo($entity, "{$entity->hookPrefix}.networkNodes", [&$nodes]);
 
         return $nodes;
-    }
-
-
-    function syncCreatedEntity(Entity $entity) {
-        $app = App::i();
-
-        $nodes = self::getEntityNodes($entity);
-
-        foreach($nodes as $node) {
-            $data = $entity->jsonSerialize();
-
-            $data = [
-                'nodeSlug' => $this->nodeSlug,
-                'className' => $entity->getClassName(),
-                'data' => $data,
-                'network__id' => $entity->network__id
-            ];
-            // @todo rever o timeout. 1 segundo é muito
-            try{
-                $node->api->apiPost('network-node/createdEntity', $data, [], [CURLOPT_TIMEOUT => 1]);
-            } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
-                $app->log->debug($e->getMessage());
-            }
-        }
     }
 }
