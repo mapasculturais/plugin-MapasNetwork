@@ -66,6 +66,48 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
+    public function GET_delete()
+    {
+        $this->DELETE_single();
+        return;
+    }
+
+    public function DELETE_single()
+    {
+        $app = App::i();
+        $nodeRepo = $app->repo("MapasNetwork\\Entities\\Node");
+        $entity = null;
+        if (isset($this->data["id"])) { // original request
+            $entity = $nodeRepo->find($this->data["id"]);
+        } else { // API request (propagated); Mapas must expose the JWT authenticator's UserApp
+            $entity = $nodeRepo->findOneBy(["userApp" => $app->auth->userApp]);
+        }
+        if (!$entity) {
+            $app->pass();
+            return;
+        }
+        $entity->checkPermission("delete"); // UserApp has soft-delete, so we'll use the Node logic instead
+        if (isset($this->data["id"])) { // propagate the request via API
+            $entity->api->apiDelete("{$this->id}/single", []);
+        }
+        $single_url = $entity->singleUrl;
+        $app->disableAccessControl();
+        $entity->userApp->destroy(true);
+        $app->enableAccessControl();
+        if ($app->request->isAjax()) {
+            $this->json(true);
+        } else {
+            // e redireciona de volta para o referer
+            $redirect_url = $app->request->getReferer();
+            if ($redirect_url === $single_url) {
+                $redirect_url = $app->createUrl("panel");
+            }
+            $app->applyHookBoundTo($this, "DELETE({$this->id}):beforeRedirect", [$entity, &$redirect_url]);
+            $app->redirect($redirect_url);
+        }
+        return;
+    }
+
     function createToken() {
         $app = App::i();
 
@@ -222,20 +264,22 @@ class Node extends \MapasCulturais\Controller
                 $node = new NodeEntities\Node;
                 $node->url = $connect_from;
                 $node->status = 1;
+                $node->name = "$name ($connect_from)";
+                // cria o App
+                $user_app = new UserApp;
+                $user_app->name = i::__("Rede Mapas") . ": {$name} ({$connect_from})";
+                $user_app->save(true);
+                $node->userApp = $user_app;
                 $node->save(true);
 
                 $node->setKeyPair($keys[0], $keys[1]);
 
-                // cria o App
-                $user_app = new UserApp;
-                $user_app->name = i::__('Rede Mapas') . ": {$name} ({$connect_from})";
-                $user_app->save(true);
-
                 $node->api->apiPost("{$this->id}/finish", [
-                    'publicKey' => $user_app->getPublicKey(),
-                    'privateKey' => $user_app->getPrivateKey(),
-                    'connecto_to' => $app->baseUrl,
-                    'name' => $app->siteName
+                    "token" => $connect_token,
+                    "publicKey" => $user_app->getPublicKey(),
+                    "privateKey" => $user_app->getPrivateKey(),
+                    "connect_to" => $app->baseUrl,
+                    "name" => $app->siteName
                 ]);
 
                 $app->redirect($this->createUrl('panel'));
@@ -260,15 +304,19 @@ class Node extends \MapasCulturais\Controller
     function POST_finish()
     {
         $this->requireAuthentication();
-
-        $connect_from = $this->postData['connecto_to'];
-        $site_name = $this->postData['name'];
-        $public_key = $this->postData['publicKey'];
-        $private_key = $this->postData['privateKey'];
+        $app = App::i();
+        $connect_from = $this->postData["connect_to"];
+        $site_name = $this->postData["name"];
+        $public_key = $this->postData["publicKey"];
+        $private_key = $this->postData["privateKey"];
+        $connect_token = $this->postData["token"];
 
         $node = new NodeEntities\Node;
         $node->url = $connect_from;
         $node->status = 1;
+        $node->name = "$site_name ($connect_from)";
+        $user_app_id = $app->cache->fetch("$connect_token:userAppId");
+        $node->userApp = $app->repo("UserApp")->find($user_app_id);
         $node->save(true);
 
         $node->setKeyPair($public_key, $private_key);
@@ -294,8 +342,9 @@ class Node extends \MapasCulturais\Controller
 
         $app = App::i();
 
+        $node_slug = $this->postData['nodeSlug'];
         $class_name = $this->postData['className'];
-        $network_id = $this->postData['networkId'];
+        $network_id = $this->postData['network__id'];
         $data = $this->postData['data'];
         $revision = $this->postData['revision'];
 
@@ -317,7 +366,6 @@ class Node extends \MapasCulturais\Controller
         $classes = [
             Agent::class,
             Space::class,
-            Event::class
         ];
 
         if(!in_array($class_name, $classes)){
@@ -325,11 +373,26 @@ class Node extends \MapasCulturais\Controller
             throw new PermissionDenied($app->user, $app->user, 'create');
         }
 
-        $query = new ApiQuery($class_name, ['networkId' => "EQ({$network_id})" ]);
 
-        if($query->findIds()) {
-            $app->log->debug("$network_id already exists");
-            $this->json("$network_id already exists");
+        // verifica se a entidade já existe para o usuário
+        $query = new ApiQuery($class_name, ['network__id' => "EQ({$network_id})", 'user' => "EQ({$app->user->id})"]);
+        if($ids = $query->findIds()) {
+            $id = $ids[0];
+
+            /**
+             * aproveita a requisição para atualizar o id da entidade no outro nó,
+             * desta forma a propagação dos 
+             */            
+            $entity = $app->repo($class_name)->find($id);
+            
+            $entity->{"network__{$node_slug}_entity_id"} = $data['id'];
+            $entity->skipNetworkSync = true;
+
+            $entity->save(true);
+
+            $app->log->debug("$network_id already exists with id {$id}");
+            $this->json("$network_id already exists with id {$id}");
+
             return;
         }
 

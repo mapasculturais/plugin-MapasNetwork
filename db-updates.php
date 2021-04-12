@@ -1,5 +1,6 @@
 <?php
 
+use function MapasCulturais\__column_exists;
 use function MapasCulturais\__exec;
 use function MapasCulturais\__sequence_exists;
 use function MapasCulturais\__table_exists;
@@ -24,6 +25,21 @@ return [
                 CONSTRAINT FK_FE222B32A76ED395
                 FOREIGN KEY (user_id) REFERENCES usr (id)
                 ON DELETE CASCADE NOT DEFERRABLE INITIALLY IMMEDIATE");
+        }
+        return true;
+    },
+    "add user_app_pubk to network_node" => function () {
+        if (!__column_exists("network_node", "user_app_pubk")) {
+            __exec("ALTER TABLE network_node ADD
+                user_app_pubk VARCHAR(255) NOT NULL");
+            __exec("ALTER TABLE network_node ADD
+                name VARCHAR(255) DEFAULT '' NOT NULL");
+            __exec("ALTER TABLE network_node ADD
+                CONSTRAINT FK_FE222B327049A56E
+                FOREIGN KEY (user_app_pubk) REFERENCES user_app (public_key)
+                ON DELETE CASCADE NOT DEFERRABLE INITIALLY IMMEDIATE");
+            __exec("CREATE INDEX IDX_FE222B327049A56E
+                ON network_node (user_app_pubk)");
         }
         return true;
     },

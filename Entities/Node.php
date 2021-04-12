@@ -6,7 +6,6 @@ use MapasCulturais\App;
 use MapasCulturais\i;
 use MapasSDK\MapasSDK;
 use MapasNetwork\Plugin;
-//use MapasCulturais\App;
 
 /**
  * Node
@@ -47,6 +46,13 @@ class Node extends \MapasCulturais\Entity
     protected $url;
 
     /**
+     * @var string
+     *
+     * @ORM\Column(name="name", type="string", nullable=false, options={"default":""})
+     */
+    protected $name;
+
+    /**
      * @var \MapasCulturais\Entities\User
      *
      * @ORM\ManyToOne(targetEntity="MapasCulturais\Entities\User", fetch="LAZY")
@@ -55,6 +61,16 @@ class Node extends \MapasCulturais\Entity
      * })
      */
     protected $user;
+
+    /**
+     * @var \MapasCulturais\Entities\UserApp
+     *
+     * @ORM\ManyToOne(targetEntity="MapasCulturais\Entities\UserApp", fetch="LAZY")
+     * @ORM\JoinColumns({
+     *   @ORM\JoinColumn(name="user_app_pubk", referencedColumnName="public_key", nullable=false, onDelete="CASCADE")
+     * })
+     */
+    protected $userApp;
 
     /**
      * @var \DateTime
@@ -75,6 +91,11 @@ class Node extends \MapasCulturais\Entity
         $this->user = $app->user;
 
         parent::__construct();
+    }
+
+    public function getControllerId()
+    {
+        return "network-node";
     }
 
     /**
@@ -150,12 +171,12 @@ class Node extends \MapasCulturais\Entity
         // @todo trocar por slug do nó
         $slug = $this->slug;
 
-        return "network_{$slug}_entity_id";
+        return "network__{$slug}_entity_id";
     }
 
     function getSlug() {
         // @todo trocar pelo slug do nó
-        return md5($this->url);;
+        return str_replace('.', '', parse_url($this->url, PHP_URL_HOST));
     }
 
     protected function canUserViewKeys($user) 
