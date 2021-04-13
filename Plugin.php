@@ -103,6 +103,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
 
         $app->hook("{$entities_hook_prefix}.update:before", function () use($plugin, $app) {
+            if (in_array($this, $plugin->skipList)) {
+                return;
+            }
             $uid = uniqid('',true);
 
             $revisions = $this->network__revisions;
@@ -126,7 +129,31 @@ class Plugin extends \MapasCulturais\Plugin
             $nodes = Plugin::getEntityNodes($this);
 
             foreach($nodes as $node) {
-                $app->enqueueJob('sync_created_entity', ['entity' => $this, 'node' => $node, 'nodeSlug' => $node->slug]); 
+                $data = [
+                    'syncAction' => 'createdEntity',
+                    'entity' => $this, 
+                    'node' => $node, 
+                    'nodeSlug' => $node->slug
+                ];
+                $app->enqueueJob('network__sync_entity', $data); 
+            }
+        });
+
+
+        $app->hook("{$entities_hook_prefix}.update:after", function () use($plugin, $app) {
+            $metadata_key = $plugin->entityMetadataKey;
+            $this->$metadata_key = $this->id;
+
+            $nodes = Plugin::getEntityNodes($this);
+
+            foreach($nodes as $node) {
+                $data = [
+                    'syncAction' => 'updatedEntity',
+                    'entity' => $this, 
+                    'node' => $node, 
+                    'nodeSlug' => $node->slug
+                ];
+                $app->enqueueJob('network__sync_entity', $data); 
             }
         });
 
@@ -142,7 +169,6 @@ class Plugin extends \MapasCulturais\Plugin
         $revisions_metadata = [
             'label' => i::__('Lista das revisões da rede', 'mapas-network'),
             'type' => 'json',
-            'private' => true,
             'default' => []
         ];
 
@@ -160,8 +186,8 @@ class Plugin extends \MapasCulturais\Plugin
 
 
         // background jobs
-        $sync_created_entity = new SyncCreatedEntityJob('sync_created_entity', $this);
-        $app->registerJobType($sync_created_entity);
+        $sync_entity = new SyncEntityJobType('network__sync_entity', $this);
+        $app->registerJobType($sync_entity);
 
         return;
     }
@@ -210,5 +236,12 @@ class Plugin extends \MapasCulturais\Plugin
         $app->applyHookBoundTo($entity, "{$entity->hookPrefix}.networkNodes", [&$nodes]);
 
         return $nodes;
+    }
+
+
+    protected $skipList = [];
+
+    function skip($entity) {
+        $this->skipList[] = $entity;
     }
 }

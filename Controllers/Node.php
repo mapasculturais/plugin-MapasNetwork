@@ -12,6 +12,7 @@ use MapasCulturais\Entities\Agent;
 use MapasCulturais\Entities\Space;
 use MapasCulturais\Entities\Event;
 use MapasCulturais\Exceptions\PermissionDenied;
+use MapasNetwork\Plugin;
 use MapasSDK\MapasSDK;
 use MapasNetwork\Entities as NodeEntities;
 
@@ -19,6 +20,10 @@ class Node extends \MapasCulturais\Controller
 {
     use Traits\ControllerAPI;
 
+    /**
+     * 
+     * @var Plugin
+     */
     public $plugin;
 
     function __construct()
@@ -346,21 +351,11 @@ class Node extends \MapasCulturais\Controller
         $class_name = $this->postData['className'];
         $network_id = $this->postData['network__id'];
         $data = $this->postData['data'];
-        $revision = $this->postData['revision'];
-
 
 
         if (isset($data[$this->plugin->entityMetadataKey])) {
             $this->json('ok');
             return;
-        }
-
-
-        foreach($data['networkRevisions'] as $revision) {
-            if(strpos($revision, $this->plugin->nodeSlug) === 0) {
-                $this->json('ok');
-                return;
-            }
         }
 
         $classes = [
@@ -384,9 +379,10 @@ class Node extends \MapasCulturais\Controller
              * desta forma a propagação dos 
              */            
             $entity = $app->repo($class_name)->find($id);
+
+
             
             $entity->{"network__{$node_slug}_entity_id"} = $data['id'];
-            $entity->skipNetworkSync = true;
 
             $entity->save(true);
 
@@ -415,9 +411,90 @@ class Node extends \MapasCulturais\Controller
                 continue;
             }
 
+            if($key == 'terms') {
+                $val = (array) $val;
+            }
+
             $entity->$key = $val;
         }
 
         $entity->save(true);
     }
+
+    function POST_updatedEntity() {
+        $this->requireAuthentication();
+
+        $app = App::i();
+
+        $node_slug = $this->postData['nodeSlug'];
+        $class_name = $this->postData['className'];
+        $network_id = $this->postData['network__id'];
+        $data = $this->postData['data'];
+
+        $revision_id = end($data['network__revisions']);
+
+        $classes = [
+            Agent::class,
+            Space::class,
+        ];
+
+        if(!in_array($class_name, $classes)){
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user, 'update');
+        }
+
+
+        // verifica se a entidade já existe para o usuário
+        $query = new ApiQuery($class_name, ['network__id' => "EQ({$network_id})", 'user' => "EQ({$app->user->id})"]);
+        if($ids = $query->findIds()) {
+            $id = $ids[0];
+
+            $entity = $app->repo($class_name)->find($id);
+            $entity->network__revisions = $entity->network__revisions ?? [];
+            
+            if (in_array($revision_id, $entity->network__revisions)){
+                $app->log->debug("$network_id $revision_id already exists");
+                $this->json("$network_id $revision_id already exists");
+                return;
+            }
+
+            $revisions = $entity->network__revisions;
+            $revisions[] = $revision_id;
+
+            $entity->network__revisions = $revisions;
+
+
+            $app->log->debug("updating $network_id");
+
+            $skip_fields = [
+                'id',
+                'parent',
+                'owner',
+                'user',
+                'userId',
+                'createTimestamp',
+                'updateTimestamp',
+
+                'network__revisions'
+            ];
+
+            foreach ($data as $key => $val) {
+                if(in_array($key, $skip_fields)) {
+                    continue;
+                }
+
+                if($key == 'terms') {
+                    $val = (array) $val;
+                }
+
+                $entity->$key = $val;
+            }
+
+            $this->plugin->skip($entity);
+
+            $entity->save(true);
+        }
+
+    }
+    
 }

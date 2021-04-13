@@ -4,7 +4,7 @@ namespace MapasNetwork;
 use MapasCulturais\App;
 use MapasCulturais\Entities\Job;
 
-class SyncCreatedEntityJob extends \MapasCulturais\Definitions\JobType
+class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
 {
     protected $plugin;
 
@@ -16,7 +16,7 @@ class SyncCreatedEntityJob extends \MapasCulturais\Definitions\JobType
     protected function _execute(Job $job)
     {
         $app = App::i();
-
+        $action = $job->syncAction;
         $entity = $job->entity;
         $node = $job->node;
 
@@ -31,7 +31,7 @@ class SyncCreatedEntityJob extends \MapasCulturais\Definitions\JobType
 
         try{
             $app->log->info("SYNC: {$entity} -> {$node->url}");
-            $node->api->apiPost('network-node/createdEntity', $data, [], [CURLOPT_TIMEOUT => 30]);
+            $node->api->apiPost("network-node/{$action}", $data, [], [CURLOPT_TIMEOUT => 30]);
 
             return true;
         } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
@@ -51,6 +51,6 @@ class SyncCreatedEntityJob extends \MapasCulturais\Definitions\JobType
      */
     protected function _generateId(array $data, string $start_string, string $interval_string, int $iterations)
     {
-        return (string) $data['entity'] . '->' . $data['node'];
+        return (string) $data['entity'] . '->' . $data['node'] . '/' . $data['syncAction'];
     }
 }
