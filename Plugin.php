@@ -2,11 +2,11 @@
 
 namespace MapasNetwork;
 
+use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
-use MapasCulturais\Definitions\JobType;
-use MapasCulturais\Entities\Job;
 use MapasCulturais\Entity;
 use MapasCulturais\i;
+use MapasNetwork\Entities\Node;
 
 /**
  * @property-read string $nodeSlug 
@@ -18,8 +18,14 @@ class Plugin extends \MapasCulturais\Plugin
     {
         $app = App::i();
 
+        $filters = $config['filters'] ?? [];
+
         $config += [
-            'nodeSlug' => $_SERVER['HOSTNAME'] ?? str_replace('.', '', parse_url($app->baseUrl, PHP_URL_HOST)) 
+            'nodeSlug' => $_SERVER['HOSTNAME'] ?? str_replace('.', '', parse_url($app->baseUrl, PHP_URL_HOST)),
+            'filters' => $filters += [
+                'agent' => [],
+                'space' => []
+            ]
         ];
         
         parent::__construct($config);
@@ -129,13 +135,15 @@ class Plugin extends \MapasCulturais\Plugin
             $nodes = Plugin::getEntityNodes($this);
 
             foreach($nodes as $node) {
-                $data = [
-                    'syncAction' => 'createdEntity',
-                    'entity' => $this, 
-                    'node' => $node, 
-                    'nodeSlug' => $node->slug
-                ];
-                $app->enqueueJob('network__sync_entity', $data); 
+                if ($plugin->checkNodeFilter($node, $this)) {
+                    $data = [
+                        'syncAction' => 'createdEntity',
+                        'entity' => $this, 
+                        'node' => $node, 
+                        'nodeSlug' => $node->slug
+                    ];
+                    $app->enqueueJob('network__sync_entity', $data);
+                }
             }
         });
 
@@ -147,17 +155,49 @@ class Plugin extends \MapasCulturais\Plugin
             $nodes = Plugin::getEntityNodes($this);
 
             foreach($nodes as $node) {
-                $data = [
-                    'syncAction' => 'updatedEntity',
-                    'entity' => $this, 
-                    'node' => $node, 
-                    'nodeSlug' => $node->slug
-                ];
-                $app->enqueueJob('network__sync_entity', $data); 
+                if ($plugin->checkNodeFilter($node, $this)) {
+                    $data = [
+                        'syncAction' => 'updatedEntity',
+                        'entity' => $this, 
+                        'node' => $node, 
+                        'nodeSlug' => $node->slug
+                    ];
+                    $app->enqueueJob('network__sync_entity', $data); 
+                }
             }
         });
 
         return;
+    }
+
+
+    /**
+     * Verifica se o nó deve receber a entidade
+
+     * @param Node $node 
+     * @param Entity $entity 
+     * @return bool 
+     */
+    function checkNodeFilter(Entities\Node $node, Entity $entity) {
+        $filters = $node->getFilters($entity->entityType);
+
+        foreach($filters as &$value) {
+            if (is_array($value)) {
+                $imploded = implode(',', $value);
+                $value = "IN($imploded)";
+            } else {
+                $value = "EQ($value)";
+            }
+        }
+
+        $filters['id'] = "EQ($entity->id)";
+        $query = new ApiQuery($entity->className, $filters);
+
+        $result = $query->findIds() == [$entity->id];
+
+        // @todo: Verificar se a entidade já está conectada com o nó e retornar true ou pensar no que fazer quando a condição de sincronizaçào não mais for atendida.
+        
+        return $result;
     }
 
     function register()

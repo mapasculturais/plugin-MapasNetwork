@@ -189,6 +189,31 @@ class Node extends \MapasCulturais\Entity
         return $this->user->id == $user->id;
     }
 
+    /**
+     * Retorna a configuração de filtros do nó
+     * 
+     * @param string $entity 
+     * @return array
+     */
+    public function getFilters(string $entity) {
+        $entity = strtolower($entity);
+        
+        $app = App::i();
+        $cache_key = $this->url . ':filters';
+
+        if (false && $app->cache->contains($cache_key)) {
+            $filters = $app->cache->fetch($cache_key);
+        } else {
+            $response = $this->api->apiGet('network-node/filters');
+
+            $filters = $response->response ?? [];
+
+            $app->cache->save($cache_key, $filters, 30 * MINUTE_IN_SECONDS);
+        }
+
+        return (array) $filters->$entity ?? [];
+    }
+
     //============================================================= //
     // The following lines are used by MapasCulturais hook system.
     // Please do not change them.

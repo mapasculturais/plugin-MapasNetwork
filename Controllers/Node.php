@@ -154,6 +154,10 @@ class Node extends \MapasCulturais\Controller
         $app->redirect("{$url}{$this->id}/connect?to={$app->baseUrl}&token={$create_token}&name={$site_name}");
     }
 
+    function GET_filters() {
+        $this->json($this->plugin->config['filters']);
+    }
+
     /**
      * Verifica o token e, caso válido, retorna o segredo.
      *
