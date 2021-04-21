@@ -2,12 +2,14 @@
 
 namespace MapasNetwork;
 
+use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entity;
 use MapasCulturais\i;
+use MapasNetwork\Entities\Node;
 
 /**
- * @property-read string $nodeSlug 
+ * @property-read string $nodeSlug
  * @package MapasNetwork
  */
 class Plugin extends \MapasCulturais\Plugin
@@ -22,10 +24,16 @@ class Plugin extends \MapasCulturais\Plugin
     {
         $app = App::i();
 
+        $filters = $config['filters'] ?? [];
+
         $config += [
-            'nodeSlug' => $_SERVER['HOSTNAME'] ?? str_replace('.', '', parse_url($app->baseUrl, PHP_URL_HOST)) 
+            'nodeSlug' => $_SERVER['HOSTNAME'] ?? str_replace('.', '', parse_url($app->baseUrl, PHP_URL_HOST)),
+            'filters' => $filters += [
+                'agent' => [],
+                'space' => []
+            ]
         ];
-        
+
         parent::__construct($config);
         return;
     }
@@ -259,6 +267,36 @@ class Plugin extends \MapasCulturais\Plugin
         return;
     }
 
+
+    /**
+     * Verifica se o nó deve receber a entidade
+
+     * @param Node $node
+     * @param Entity $entity
+     * @return bool
+     */
+    static function checkNodeFilter(Entities\Node $node, Entity $entity) {
+        $filters = $node->getFilters($entity->entityType);
+
+        foreach($filters as &$value) {
+            if (is_array($value)) {
+                $imploded = implode(',', $value);
+                $value = "IN($imploded)";
+            } else {
+                $value = "EQ($value)";
+            }
+        }
+
+        $filters['id'] = "EQ($entity->id)";
+        $query = new ApiQuery($entity->className, $filters);
+
+        $result = $query->findIds() == [$entity->id];
+
+        // @todo: Verificar se a entidade já está conectada com o nó e retornar true ou pensar no que fazer quando a condição de sincronizaçào não mais for atendida.
+
+        return $result;
+    }
+
     function register()
     {
         $app = App::i();
@@ -368,10 +406,10 @@ class Plugin extends \MapasCulturais\Plugin
 
     /**
      * Retorna a lista de nodes para sincronização de uma entidade
-     * 
-     * @param Entity $entity 
-     * 
-     * @return Entities\Node[] 
+     *
+     * @param Entity $entity
+     *
+     * @return Entities\Node[]
      */
     static function getEntityNodes(Entity $entity)
     {
@@ -398,12 +436,14 @@ class Plugin extends \MapasCulturais\Plugin
         $entity->$metadata_key = $entity->id;
         $nodes = Plugin::getEntityNodes($entity);
         foreach ($nodes as $node) {
-            $app->enqueueJob(self::JOB_SLUG, [
-                "syncAction" => $action,
-                "entity" => $entity,
-                "node" => $node,
-                "nodeSlug" => $node->slug
-            ]);
+            if (Plugin::checkNodeFilter($node, $entity)) {
+                $app->enqueueJob(self::JOB_SLUG, [
+                    "syncAction" => $action,
+                    "entity" => $entity,
+                    "node" => $node,
+                    "nodeSlug" => $node->slug
+                ]);
+            }
         }
         return;
     }
@@ -415,12 +455,14 @@ class Plugin extends \MapasCulturais\Plugin
         $file->owner->$metadata_key = $file->owner->id;
         $nodes = Plugin::getEntityNodes($file->owner);
         foreach ($nodes as $node) {
-            $app->enqueueJob(self::JOB_SLUG_FILES, [
-                "syncAction" => $action,
-                "entity" => $file,
-                "node" => $node,
-                "nodeSlug" => $node->slug
-            ]);
+            if (Plugin::checkNodeFilter($node, $file->owner)) {
+                $app->enqueueJob(self::JOB_SLUG_FILES, [
+                    "syncAction" => $action,
+                    "entity" => $file,
+                    "node" => $node,
+                    "nodeSlug" => $node->slug
+                ]);
+            }
         }
         return;
     }
@@ -432,12 +474,14 @@ class Plugin extends \MapasCulturais\Plugin
         $list->owner->$metadata_key = $list->owner->id;
         $nodes = Plugin::getEntityNodes($list->owner);
         foreach ($nodes as $node) {
-            $app->enqueueJob(self::JOB_SLUG_METALISTS, [
-                "syncAction" => $action,
-                "entity" => $list,
-                "node" => $node,
-                "nodeSlug" => $node->slug
-            ]);
+            if (Plugin::checkNodeFilter($node, $list->owner)) {
+                $app->enqueueJob(self::JOB_SLUG_METALISTS, [
+                    "syncAction" => $action,
+                    "entity" => $list,
+                    "node" => $node,
+                    "nodeSlug" => $node->slug
+                ]);
+            }
         }
         return;
     }
