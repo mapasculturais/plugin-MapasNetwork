@@ -6,6 +6,10 @@ use MapasCulturais\Entities\Job;
 
 class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
 {
+    /**
+     * MapasNetwork Plugin
+     * @var Plugin
+     */
     protected $plugin;
 
     function __construct(string $slug, Plugin $plugin)
@@ -13,6 +17,7 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
         $this->plugin = $plugin;
         parent::__construct($slug);
     }
+
     protected function _execute(Job $job)
     {
         $app = App::i();
@@ -20,7 +25,7 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
         $entity = $job->entity;
         $node = $job->node;
 
-        $data = $entity->jsonSerialize();
+        $data = $this->plugin->serializeEntity($entity);
 
         $data = [
             'nodeSlug' => $this->plugin->nodeSlug,

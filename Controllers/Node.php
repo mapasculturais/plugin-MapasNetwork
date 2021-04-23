@@ -402,16 +402,27 @@ class Node extends \MapasCulturais\Controller
 
         $skip_fields = [
             'id',
-            'parent',
-            'owner',
             'user',
             'userId',
             'createTimestamp',
             'updateTimestamp'
         ];
 
+        $skip_null_fields = [
+            'owner',
+            'parent',
+            'agent'
+        ];
+
+
+        $data = $this->plugin->unserializeEntity($data);
+
         foreach ($data as $key => $val) {
             if(in_array($key, $skip_fields)) {
+                continue;
+            }
+
+            if (is_null($val) && in_array($key, $skip_null_fields)) {
                 continue;
             }
 
@@ -472,15 +483,20 @@ class Node extends \MapasCulturais\Controller
 
             $skip_fields = [
                 'id',
-                'parent',
-                'owner',
                 'user',
                 'userId',
                 'createTimestamp',
                 'updateTimestamp',
-
                 'network__revisions'
             ];
+
+            $skip_null_fields = [
+                'parent',
+                'owner',
+                'agent',
+            ];
+
+            $data = $this->plugin->unserializeEntity($data);
 
             foreach ($data as $key => $val) {
                 if(in_array($key, $skip_fields)) {

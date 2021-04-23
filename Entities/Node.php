@@ -211,7 +211,7 @@ class Node extends \MapasCulturais\Entity
             $app->cache->save($cache_key, $filters, 30 * MINUTE_IN_SECONDS);
         }
 
-        return (array) $filters->$entity ?? [];
+        return (array) ($filters->$entity ?? []);
     }
 
     //============================================================= //
