@@ -515,7 +515,7 @@ class Node extends \MapasCulturais\Controller
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
-            if (in_array($network_id, $owner->$network_ids_key)) {
+            if (isset($owner->$network_ids_key->$network_id)) {
                 $this->json("$network_id $revision_id already exists");
                 return;
             }
@@ -538,11 +538,12 @@ class Node extends \MapasCulturais\Controller
             }
             $metalists[$group][] = $new_item;
             $owner->metalists = $metalists;
-            // save the new entry's network ID
-            $network_ids = $owner->$network_ids_key;
-            $network_ids[] = $network_id;
+            // save the new entry's network ID (as placeholder)
+            $network_ids = (array) $owner->$network_ids_key;
+            $network_ids[$network_id] = -1;
             $owner->$network_ids_key = $network_ids;
-            // stop network and revision IDs from being created again
+            // inform networkID to plugin and stop network and revision IDs from being created again
+            $this->plugin->saveNetworkID($network_id);
             $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
             // both owner and new entry must be saved since the IDs are kept in the owner
             $owner->save(true);
@@ -614,8 +615,61 @@ class Node extends \MapasCulturais\Controller
 
     function POST_updatedMetaList()
     {
-        // TODO: implement
-        App::i()->pass();
+        $this->requireAuthentication();
+        $app = App::i();
+        $owner_class = $this->postData["ownerClassName"];
+        $owner_network_id = $this->postData["ownerNetworkID"];
+        $network_id = $this->postData["network__id"];
+        $data = $this->postData["data"];
+        $group = $data["group"];
+        $revision_key = "network__revisions_metalist_$group";
+        $network_ids_key = "network__ids_metalist_$group";
+        $revisions = $this->postData[$revision_key];
+        $revision_id = isset($revisions) ? end($revisions) : null;
+        $classes = [
+            Agent::class,
+            Space::class,
+        ];
+        if (!in_array($owner_class, $classes)) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user,
+                                       "update metalist");
+        }
+        // obtain the owner entity
+        $query = new ApiQuery($owner_class, [
+            "network__id" => "EQ({$owner_network_id})",
+            "user" => "EQ({$app->user->id})"
+        ]);
+        if ($ids = $query->findIds()) {
+            $id = $ids[0];
+            $owner = $app->repo($owner_class)->find($id);
+            $owner->$revision_key = $owner->$revision_key ?? [];
+            $owner->$network_ids_key = $owner->$network_ids_key ?? [];
+            if (in_array($revision_id, $owner->$revision_key)) {
+                $this->json("$network_id $revision_id already exists");
+                return;
+            }
+            // add a revision
+            $revisions = $owner->$revision_key;
+            $revisions[] = $revision_id;
+            $owner->$revision_key = $revisions;
+            // update the item
+            $id = $owner->$network_ids_key->$network_id;
+            if (!$id) {
+                $this->errorJson("The item $network_id does not exist.", 404);
+                return;
+            }
+            $item = $app->repo("MetaList")->find($id);
+            $item->title = $data["title"];
+            $item->value = $data["value"];
+            $item->description = $data["description"] ?? null;
+            // inform network ID to plugin and stop revision ID from being created again
+            $this->plugin->saveNetworkID($network_id);
+            $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
+            // both owner and entry must be saved since the IDs are kept in the owner
+            $owner->save(true);
+            $item->save(true);
+        }
         return;
     }
 

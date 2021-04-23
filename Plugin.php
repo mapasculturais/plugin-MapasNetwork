@@ -20,6 +20,8 @@ class Plugin extends \MapasCulturais\Plugin
     const SKIP_AFTER = "after";
     const SKIP_BEFORE = "before";
 
+    protected $savedNetworkID = null;
+
     function __construct(array $config = [])
     {
         $app = App::i();
@@ -177,14 +179,13 @@ class Plugin extends \MapasCulturais\Plugin
                 return;
             }
             $ids_key = "network__ids_metalist_{$this->group}";
-            $ids = $this->owner->$ids_key ?? [];
-            $metalist = $this->owner->metalists;
-            $metalist = $metalist[$this->group] ?? [];
-            if (count($ids) <= count($metalist)) {
+            $ids = (array) $this->owner->$ids_key ?? [];
+            if (array_search($this->id, $ids) === false) {
                 $uid = uniqid("", true);
                 // replicate and adapt the code from the getter hook
                 $prefix = str_replace("MapasCulturais\\Entities\\", "", "{$this->className}:{$this->id}");
-                $ids[] = "{$prefix}:{$uid}";
+                $plugin->savedNetworkID = "{$prefix}:{$uid}";
+                $ids[$plugin->savedNetworkID] = -1;
                 $this->owner->$ids_key = $ids;
             }
             $uid = uniqid("", true);
@@ -197,6 +198,13 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.insert:after", function () use ($plugin) {
             /** @var MapasCulturais\Entity\MetaList $this */
+            $ids_key = "network__ids_metalist_{$this->group}";
+            $ids = (array) $this->owner->$ids_key ?? [];
+            if (array_search($this->id, $ids) === false) {
+                $ids[$plugin->savedNetworkID] = $this->id;
+                $this->owner->$ids_key = $ids;
+                $this->owner->save(true);
+            }
             $plugin->syncMetaList($this, "createdMetaList");
             return;
         });
@@ -233,15 +241,14 @@ class Plugin extends \MapasCulturais\Plugin
             if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
-            $ids_key = "network__ids_metalist_{$this->group}";
-            $ids = $this->owner->$ids_key ?? [];
-            $files = $this->owner->files;
-            $files = $metalist[$this->group] ?? [];
-            if (count($ids) <= count($files)) {
+            $ids_key = "network__ids_files_{$this->group}";
+            $ids = (array) $this->owner->$ids_key ?? [];
+            if (array_search($this->id, $ids) === false) {
                 $uid = uniqid("", true);
                 // replicate the code from the getter hook because it's expensive to enable
                 $prefix = str_replace("MapasCulturais\\Entities\\", "", (string) $this);
-                $ids[] = "{$prefix}:{$uid}";
+                $plugin->savedNetworkID = "{$prefix}:{$uid}";
+                $ids[$plugin->savedNetworkID] = -1;
                 $this->owner->$ids_key = $ids;
             }
             $uid = uniqid("", true);
@@ -255,6 +262,13 @@ class Plugin extends \MapasCulturais\Plugin
         $app->hook("$entities_hook_prefix.file(downloads).insert:after", function () use ($plugin) {
             /** @var MapasCulturais\Entity\File $this */
             // TODO: implement
+            $ids_key = "network__ids_files_{$this->group}";
+            $ids = (array) $this->owner->$ids_key ?? [];
+            if (array_search($this->id, $ids) === false) {
+                $ids[$plugin->savedNetworkID] = $this->id;
+                $this->owner->$ids_key = $ids;
+                $this->owner->save(true);
+            }
             $plugin->syncFileGroup($this, "createdFile");
             return;
         });
@@ -427,6 +441,12 @@ class Plugin extends \MapasCulturais\Plugin
 
     function skip($entity, $modes) {
         $this->skipList[(string) $entity] = $modes;
+    }
+
+    function saveNetworkID($network_id)
+    {
+        $this->savedNetworkID = $network_id;
+        return;
     }
 
     function syncEntity(Entity $entity, string $action)

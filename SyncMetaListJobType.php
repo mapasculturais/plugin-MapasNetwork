@@ -22,15 +22,15 @@ class SyncMetaListJobType extends \MapasCulturais\Definitions\JobType
         $entity = $job->entity;
         $group = $entity->group;
         $node = $job->node;
-        $index = array_search($entity, $entity->owner->metalists[$group]);
         $revisions_key = "network__revisions_metalist_$group";
         $ids_key = "network__ids_metalist_$group";
+        $network_id = array_search($entity->id, (array) $entity->owner->$ids_key);
         $data = [
             "nodeSlug" => $this->plugin->nodeSlug,
             "ownerClassName" => $entity->owner->className,
             "ownerNetworkID" => $entity->owner->network__id,
             "className" => $entity->className,
-            "network__id" => $entity->owner->$ids_key[$index],
+            "network__id" => $network_id,
             $revisions_key => $entity->owner->$revisions_key,
             "data" => $entity->jsonSerialize(),
         ];
