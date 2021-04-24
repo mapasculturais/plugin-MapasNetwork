@@ -15,6 +15,7 @@ use MapasNetwork\Entities\Node;
 class Plugin extends \MapasCulturais\Plugin
 {
     const JOB_SLUG = "network__sync_entity";
+    const JOB_SLUG_DELETION = "network__sync_entity_deletion";
     const JOB_SLUG_FILES = "network___sync_entity_files";
     const JOB_SLUG_METALISTS = "network__sync_entity_metalists";
     const SKIP_AFTER = "after";
@@ -222,17 +223,22 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.update:after", function () use ($plugin) {
             /** @var MapasCulturais\Entity\MetaList $this */
-            // TODO: implement
             if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
             $plugin->syncMetaList($this, "updatedMetaList");
             return;
         });
-        $app->hook("$entities_hook_prefix.$metalist_hook_component.remove:after", function () use ($plugin) {
+        $app->hook("$entities_hook_prefix.$metalist_hook_component.remove:before", function () use ($plugin) {
             /** @var MapasCulturais\Entity\MetaList $this */
-            // TODO: implement
-            $plugin->syncMetaList($this, "deletedMetaList");
+            if (!in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
+                $uid = uniqid("", true);
+                $revisions_key = "network__revisions_metalist_{$this->group}";
+                $revisions = $this->owner->$revisions_key;
+                $revisions[] = "{$this->owner->networkRevisionPrefix}:{$uid}";
+                $this->owner->$revisions_key = $revisions;
+            }
+            $plugin->requestDeletion($this, "deletedMetaList", $this->group, "metalist");
             return;
         });
         $app->hook("$entities_hook_prefix.file(downloads).insert:before", function () use ($plugin) {
@@ -275,7 +281,7 @@ class Plugin extends \MapasCulturais\Plugin
         $app->hook("$entities_hook_prefix.file(downloads).remove:after", function () use ($plugin) {
             /** @var MapasCulturais\Entity\File $this */
             // TODO: implement
-            $plugin->syncFileGroup($this, "deletedFile");
+            $plugin->requestDeletion($this, "deletedFile", $this->group, "files");
             return;
         });
         return;
@@ -383,10 +389,10 @@ class Plugin extends \MapasCulturais\Plugin
         $this->registerSpaceMetadata("network__revisions_metalist_videos", $definition);
 
         // background jobs
-        $sync_entity = new SyncEntityJobType(self::JOB_SLUG, $this);
-        $app->registerJobType($sync_entity);
+        $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
         $app->registerJobType(new SyncFileJobType(self::JOB_SLUG_FILES, $this));
         $app->registerJobType(new SyncMetaListJobType(self::JOB_SLUG_METALISTS, $this));
+        $app->registerJobType(new SyncDeletionJobType(self::JOB_SLUG_DELETION, $this));
         return;
     }
 
@@ -436,6 +442,42 @@ class Plugin extends \MapasCulturais\Plugin
         return $nodes;
     }
 
+
+    function requestDeletion(\MapasCulturais\Entity $entity, $action,
+                             $group, $type)
+    {
+        $app = App::i();
+        $revisions_key = "network__revisions_{$type}_{$group}";
+        $revisions = $entity->owner->$revisions_key;
+        $metadata_key = $this->entityMetadataKey;
+        $entity->owner->$metadata_key = $entity->owner->id;
+        $ids_key = "network__ids_{$type}_{$group}";
+        $network_id = array_search($entity->id,
+                                   (array) $entity->owner->$ids_key);
+        $ids = (array) $entity->owner->$ids_key;
+        unset($ids[$network_id]);
+        $entity->owner->$ids_key = $ids;
+        $entity->owner->save(true);
+        $nodes = Plugin::getEntityNodes($entity->owner);
+        foreach ($nodes as $node) {
+            if (Plugin::checkNodeFilter($node, $entity->owner)) {
+                $app->enqueueJob(self::JOB_SLUG_DELETION, [
+                    "syncAction" => $action,
+                    "entity" => $entity->jsonSerialize(),
+                    "node" => $node,
+                    "nodeSlug" => $node->slug,
+                    "networkID" => $network_id,
+                    "className" => $entity->className,
+                    "ownerClassName" => $entity->owner->className,
+                    "ownerNetworkID" => $entity->owner->network__id,
+                    "group" => $group,
+                    "revisions_key" => $revisions_key,
+                    "revisions" => $revisions
+                ]);
+            }
+        }
+        return;
+    }
 
     protected $skipList = [];
 

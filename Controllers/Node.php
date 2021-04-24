@@ -561,8 +561,57 @@ class Node extends \MapasCulturais\Controller
 
     function POST_deletedMetaList()
     {
-        // TODO: implement
-        App::i()->pass();
+        $this->requireAuthentication();
+        $app = App::i();
+        $owner_class = $this->postData["ownerClassName"];
+        $owner_network_id = $this->postData["ownerNetworkID"];
+        $network_id = $this->postData["network__id"];
+        $group = $this->postData["group"];
+        $revision_key = "network__revisions_metalist_$group";
+        $network_ids_key = "network__ids_metalist_$group";
+        $revisions = $this->postData[$revision_key];
+        $revision_id = isset($revisions) ? end($revisions) : null;
+        $classes = [
+            Agent::class,
+            Space::class,
+        ];
+        if (!in_array($owner_class, $classes)) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user,
+                                       "delete metalist");
+        }
+        // obtain the owner entity
+        $query = new ApiQuery($owner_class, [
+            "network__id" => "EQ({$owner_network_id})",
+            "user" => "EQ({$app->user->id})"
+        ]);
+        if ($ids = $query->findIds()) {
+            $id = $ids[0];
+            $owner = $app->repo($owner_class)->find($id);
+            $owner->$revision_key = $owner->$revision_key ?? [];
+            $owner->$network_ids_key = $owner->$network_ids_key ?? [];
+            if (in_array($revision_id, $owner->$revision_key)) {
+                $this->json("$network_id $revision_id already exists");
+                return;
+            }
+            // add a revision
+            $revisions = $owner->$revision_key;
+            $revisions[] = $revision_id;
+            $owner->$revision_key = $revisions;
+            // delete the item
+            $id = $owner->$network_ids_key->$network_id;
+            if (!$id) {
+                $this->errorJson("The item $network_id does not exist.", 404);
+                return;
+            }
+            $item = $app->repo("MetaList")->find($id);
+            // inform network ID to plugin and stop revision ID from being created again
+            $this->plugin->saveNetworkID($network_id);
+            $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
+            // the owner must be saved since the IDs are kept there
+            $owner->save(true);
+            $item->delete(true);
+        }
         return;
     }
 
