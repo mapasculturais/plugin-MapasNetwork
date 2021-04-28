@@ -477,8 +477,63 @@ class Node extends \MapasCulturais\Controller
 
     function POST_createdFile()
     {
-        // TODO: implement
-        App::i()->pass();
+        $this->requireAuthentication();
+        $app = App::i();
+        $owner_class = $this->postData["ownerClassName"];
+        $owner_network_id = $this->postData["ownerNetworkID"];
+        $class_name = $this->postData["className"];
+        $network_id = $this->postData["network__id"];
+        $data = $this->postData["data"];
+        $group = $data["group"];
+        $revision_key = "network__revisions_files_$group";
+        $network_ids_key = "network__ids_files_$group";
+        $revisions = $this->postData[$revision_key];
+        $revision_id = isset($revisions) ? end($revisions) : null;
+        $classes = [
+            Agent::class,
+            Space::class,
+        ];
+        if (!in_array($owner_class, $classes)) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user,
+                                       "create file");
+        }
+        // obtain the owner entity
+        $query = new ApiQuery($owner_class, [
+            "network__id" => "EQ({$owner_network_id})",
+            "user" => "EQ({$app->user->id})"
+        ]);
+        if ($ids = $query->findIds()) {
+            $id = $ids[0];
+            $owner = $app->repo($owner_class)->find($id);
+            $owner->$revision_key = $owner->$revision_key ?? [];
+            $owner->$network_ids_key = $owner->$network_ids_key ?? [];
+            if (isset($owner->$network_ids_key->$network_id)) {
+                $this->json("$network_id $revision_id already exists");
+                return;
+            }
+            // since the whole group is treated as one thing as far as revisions go, insertion is a revision
+            $revisions = $owner->$revision_key;
+            $revisions[] = $revision_id;
+            $owner->$revision_key = $revisions;
+            // save the new entry's network ID (as placeholder)
+            $network_ids = (array) $owner->$network_ids_key;
+            $network_ids[$network_id] = -1;
+            $owner->$network_ids_key = $network_ids;
+            // stop network and revision IDs from being created again
+            $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
+            // save only the owner since the IDs are kept in the owner and the entry doesn't exist yet
+            $owner->save(true);
+            // enqueue the download
+            $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
+                "user" => $app->user->id,
+                "networkID" => $network_id,
+                "className" => $class_name,
+                "ownerClassName" => $owner_class,
+                "ownerNetworkID" => $owner_network_id,
+                "data" => $data
+            ]);
+        }
         return;
     }
 
@@ -554,8 +609,57 @@ class Node extends \MapasCulturais\Controller
 
     function POST_deletedFile()
     {
-        // TODO: implement
-        App::i()->pass();
+        $this->requireAuthentication();
+        $app = App::i();
+        $owner_class = $this->postData["ownerClassName"];
+        $owner_network_id = $this->postData["ownerNetworkID"];
+        $network_id = $this->postData["network__id"];
+        $group = $this->postData["group"];
+        $revision_key = "network__revisions_files_$group";
+        $network_ids_key = "network__ids_files_$group";
+        $revisions = $this->postData[$revision_key];
+        $revision_id = isset($revisions) ? end($revisions) : null;
+        $classes = [
+            Agent::class,
+            Space::class,
+        ];
+        if (!in_array($owner_class, $classes)) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user,
+                                       "delete file");
+        }
+        // obtain the owner entity
+        $query = new ApiQuery($owner_class, [
+            "network__id" => "EQ({$owner_network_id})",
+            "user" => "EQ({$app->user->id})"
+        ]);
+        if ($ids = $query->findIds()) {
+            $id = $ids[0];
+            $owner = $app->repo($owner_class)->find($id);
+            $owner->$revision_key = $owner->$revision_key ?? [];
+            $owner->$network_ids_key = $owner->$network_ids_key ?? [];
+            if (in_array($revision_id, $owner->$revision_key)) {
+                $this->json("$network_id $revision_id already exists");
+                return;
+            }
+            // add a revision
+            $revisions = $owner->$revision_key;
+            $revisions[] = $revision_id;
+            $owner->$revision_key = $revisions;
+            // delete the item
+            $id = $owner->$network_ids_key->$network_id;
+            if (!$id) {
+                $this->errorJson("The item $network_id does not exist.", 404);
+                return;
+            }
+            $item = $app->repo("File")->find($id);
+            // inform network ID to plugin and stop revision ID from being created again
+            $this->plugin->saveNetworkID($network_id);
+            $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
+            // the owner must be saved since the IDs are kept there
+            $owner->save(true);
+            $item->delete(true);
+        }
         return;
     }
 

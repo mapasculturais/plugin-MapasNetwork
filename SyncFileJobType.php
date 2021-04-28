@@ -20,29 +20,22 @@ class SyncFileJobType extends \MapasCulturais\Definitions\JobType
         $app = App::i();
         $action = $job->syncAction;
         $entity = $job->entity;
-        $group = $job->group;
+        $group = $entity->group;
         $node = $job->node;
         $revisions_key = "network__revisions_files_$group";
+        $ids_key = "network__ids_files_$group";
+        $network_id = array_search($entity->id, (array) $entity->owner->$ids_key);
         $data = [
             "nodeSlug" => $this->plugin->nodeSlug,
-            "className" => $entity->getClassName(),
-            "network__id" => $entity->network__id,
-            "group" => $group,
-            $revisions_key => $entity->$revisions_key,
-            "data" => [],
+            "ownerClassName" => $entity->owner->className,
+            "ownerNetworkID" => $entity->owner->network__id,
+            "className" => $entity->className,
+            "network__id" => $network_id,
+            $revisions_key => $entity->owner->$revisions_key,
+            "data" => $entity->jsonSerialize(),
         ];
-        // TODO: implementation will change to have job do the uploads instead of this
-        foreach ($entity->files[$group] as $file) {
-            $data["data"][] = [
-                "md5" => $file->md5,
-                "mimeType" => $file->mime_content_type,
-                "name" => $file->name,
-                "url" => $file->url,
-                "description" => $file->description,
-            ];
-        }
         try {
-            $app->log->info("SYNC: $entity.files($group) -> {$node->url}");
+            $app->log->info("SYNC: $entity -> {$node->url}");
             $node->api->apiPost("network-node/{$action}", $data, [],
                                 [CURLOPT_TIMEOUT => 30]);
         } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
@@ -63,6 +56,6 @@ class SyncFileJobType extends \MapasCulturais\Definitions\JobType
     protected function _generateId(array $data, string $start_string,
                                    string $interval_string, int $iterations)
     {
-        return "{$data["entity"]}.files({$data["group"]})->{$data["node"]}/{$data["syncAction"]}";
+        return "{$data["entity"]}->{$data["node"]}/{$data["syncAction"]}";
     }
 }

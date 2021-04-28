@@ -16,7 +16,8 @@ class Plugin extends \MapasCulturais\Plugin
 {
     const JOB_SLUG = "network__sync_entity";
     const JOB_SLUG_DELETION = "network__sync_entity_deletion";
-    const JOB_SLUG_FILES = "network___sync_entity_files";
+    const JOB_SLUG_DOWNLOADS = "network__sync_download_files";
+    const JOB_SLUG_FILES = "network__sync_entity_files";
     const JOB_SLUG_METALISTS = "network__sync_entity_metalists";
     const SKIP_AFTER = "after";
     const SKIP_BEFORE = "before";
@@ -81,91 +82,68 @@ class Plugin extends \MapasCulturais\Plugin
             mkdir($dir);
         }
 
+        /** @var Plugin $plugin */
         $plugin = $this;
 
-        $app->hook("mapasculturais.run:before", function () use ($app, $plugin) {
-            if ($app->user->is("guest")) {
+        $app->hook("mapasculturais.run:before", function () use ($plugin) {
+            /** @var \MapasCulturais\App $this */
+            if ($this->user->is("guest")) {
                 return;
             }
-            $nodes = $plugin->getCurrentUserNodes();
+            $nodes = Plugin::getCurrentUserNodes();
             foreach ($nodes as $node) {
                 $config = [
                     "label" => "Id da entidade no node {$node->slug}",
                     "private" => true,
                     "type" => "integer"
-                    ];
-                    // algo como network_spcultura_entity_id
-                    $key = $node->entityMetadataKey;
-                    $plugin->registerAgentMetadata($key, $config);
-                    $plugin->registerSpaceMetadata($key, $config);
+                ];
+                // algo como network_spcultura_entity_id
+                $key = $node->entityMetadataKey;
+                $plugin->registerAgentMetadata($key, $config);
+                $plugin->registerSpaceMetadata($key, $config);
                 //$plugin->registerEventMetadata($key, $config);
-                $config = [
-                    "label" => "Lista de IDs dos downloads no node {$node->slug}",
-                    "private" => true,
-                    "type" => "json"
-                ];
-                $key = "{$node->entityMetadataKey}_files_downloads";
-                $plugin->registerAgentMetadata($key, $config);
-                $plugin->registerSpaceMetadata($key, $config);
-                $config = [
-                    "label" => "Lista de IDs dos links no node {$node->slug}",
-                    "private" => true,
-                    "type" => "json"
-                ];
-                $key = "{$node->entityMetadataKey}_metalist_links";
-                $plugin->registerAgentMetadata($key, $config);
-                $plugin->registerSpaceMetadata($key, $config);
-                $config = [
-                    "label" => "Lista de IDs dos víudeos no node {$node->slug}",
-                    "private" => true,
-                    "type" => "json"
-                ];
-                $key = "{$node->entityMetadataKey}_metalist_videos";
-                $plugin->registerAgentMetadata($key, $config);
-                $plugin->registerSpaceMetadata($key, $config);
             }
+            return;
         });
-
 
         $entities_hook_prefix = 'entity(<<Agent|Space>>)';
 
         $app->hook("entity(<<Agent|Space>>).get(networkRevisionPrefix)", function (&$value) use ($plugin) {
-            /** @var MapasCulturais\Entity $this */
+            /** @var \MapasCulturais\Entity $this */
             $slug = $plugin->nodeSlug;
             $entity_id = str_replace("MapasCulturais\\Entities\\", "", (string) $this);
             // algo como spcultura:Agent:33
             $value = "{$slug}:$entity_id";
+            return;
         });
 
         $app->hook("{$entities_hook_prefix}.update:before", function () use ($plugin) {
-            /** @var MapasCulturais\Entity $this */
+            /** @var \MapasCulturais\Entity $this */
             if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this] ?? []))) {
                 return;
             }
+            Plugin::ensureNetworkID($this);
             $uid = uniqid("", true);
-
             $revisions = $this->network__revisions;
             $revisions[] = "{$this->networkRevisionPrefix}:{$uid}";
-
             $this->network__revisions = $revisions;
+            return;
         });
 
         $app->hook("{$entities_hook_prefix}.insert:before", function () {
-            /** @var MapasCulturais\Entity $this */
-            if (!$this->network__id) {
-                $uid = uniqid("", true);
-                $this->network__id = "{$this->networkRevisionPrefix}:{$uid}";
-            }
+            /** @var \MapasCulturais\Entity $this */
+            Plugin::ensureNetworkID($this);
+            return;
         });
 
         $app->hook("{$entities_hook_prefix}.insert:after", function () use ($plugin) {
-            /** @var MapasCulturais\Entity $this */
+            /** @var \MapasCulturais\Entity $this */
             $plugin->syncEntity($this, "createdEntity");
             return;
         });
 
         $app->hook("{$entities_hook_prefix}.update:after", function () use ($plugin) {
-            /** @var MapasCulturais\Entity $this */
+            /** @var \MapasCulturais\Entity $this */
             if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this] ?? []))) {
                 return;
             }
@@ -175,7 +153,7 @@ class Plugin extends \MapasCulturais\Plugin
 
         $metalist_hook_component = "metalist(<<links|videos>>)";
         $app->hook("$entities_hook_prefix.$metalist_hook_component.insert:before", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\MetaList $this */
+            /** @var MapasCulturais\Entities\MetaList $this */
             if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
@@ -194,11 +172,13 @@ class Plugin extends \MapasCulturais\Plugin
             $revisions = $this->owner->$revisions_key;
             $revisions[] = "{$this->owner->networkRevisionPrefix}:{$uid}";
             $this->owner->$revisions_key = $revisions;
+            Plugin::ensureNetworkID($this->owner);
+            $plugin->skip($this->owner, [Plugin::SKIP_BEFORE]);
             $this->owner->save(true);
             return;
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.insert:after", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\MetaList $this */
+            /** @var \MapasCulturais\Entities\MetaList $this */
             $ids_key = "network__ids_metalist_{$this->group}";
             $ids = (array) $this->owner->$ids_key ?? [];
             if (array_search($this->id, $ids) === false) {
@@ -210,7 +190,7 @@ class Plugin extends \MapasCulturais\Plugin
             return;
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.update:before", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\MetaList $this */
+            /** @var \MapasCulturais\Entities\MetaList $this */
             if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
@@ -219,10 +199,13 @@ class Plugin extends \MapasCulturais\Plugin
             $revisions = $this->owner->$revisions_key;
             $revisions[] = "{$this->owner->networkRevisionPrefix}:{$uid}";
             $this->owner->$revisions_key = $revisions;
+            Plugin::ensureNetworkID($this->owner);
+            $plugin->skip($this->owner, [Plugin::SKIP_BEFORE]);
+            $this->owner->save(true);
             return;
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.update:after", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\MetaList $this */
+            /** @var \MapasCulturais\Entities\MetaList $this */
             if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
@@ -230,20 +213,12 @@ class Plugin extends \MapasCulturais\Plugin
             return;
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.remove:before", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\MetaList $this */
-            if (!in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
-                $uid = uniqid("", true);
-                $revisions_key = "network__revisions_metalist_{$this->group}";
-                $revisions = $this->owner->$revisions_key;
-                $revisions[] = "{$this->owner->networkRevisionPrefix}:{$uid}";
-                $this->owner->$revisions_key = $revisions;
-            }
+            /** @var \MapasCulturais\Entities\MetaList $this */
             $plugin->requestDeletion($this, "deletedMetaList", $this->group, "metalist");
             return;
         });
-        $app->hook("$entities_hook_prefix.file(downloads).insert:before", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\File $this */
-            // TODO: verify/implement
+        $app->hook("$entities_hook_prefix.file(<<*>>).insert:before", function () use ($plugin) {
+            /** @var \MapasCulturais\Entities\File $this */
             if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
@@ -262,12 +237,13 @@ class Plugin extends \MapasCulturais\Plugin
             $revisions = $this->owner->$revisions_key;
             $revisions[] = "{$this->owner->networkRevisionPrefix}:{$uid}";
             $this->owner->$revisions_key = $revisions;
+            Plugin::ensureNetworkID($this->owner);
+            $plugin->skip($this->owner, [Plugin::SKIP_BEFORE]);
             $this->owner->save(true);
             return;
         });
-        $app->hook("$entities_hook_prefix.file(downloads).insert:after", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\File $this */
-            // TODO: implement
+        $app->hook("$entities_hook_prefix.file(<<*>>).insert:after", function () use ($plugin) {
+            /** @var \MapasCulturais\Entities\File $this */
             $ids_key = "network__ids_files_{$this->group}";
             $ids = (array) $this->owner->$ids_key ?? [];
             if (array_search($this->id, $ids) === false) {
@@ -275,12 +251,11 @@ class Plugin extends \MapasCulturais\Plugin
                 $this->owner->$ids_key = $ids;
                 $this->owner->save(true);
             }
-            $plugin->syncFileGroup($this, "createdFile");
+            $plugin->syncFile($this, "createdFile");
             return;
         });
-        $app->hook("$entities_hook_prefix.file(downloads).remove:after", function () use ($plugin) {
-            /** @var MapasCulturais\Entity\File $this */
-            // TODO: implement
+        $app->hook("$entities_hook_prefix.file(<<*>>).remove:before", function () use ($plugin) {
+            /** @var \MapasCulturais\Entities\File $this */
             $plugin->requestDeletion($this, "deletedFile", $this->group, "files");
             return;
         });
@@ -341,58 +316,45 @@ class Plugin extends \MapasCulturais\Plugin
         $this->registerAgentMetadata('network__id', $network_id_metadata);
         $this->registerSpaceMetadata('network__id', $network_id_metadata);
 
-        // network IDs for downloads
-        $definition = [
-            "label" => i::__("Lista das IDs de rede dos downloads", "mapas-network"),
-            "type" => "json",
-            "default" => []
+        // should probably add a post-init hook for these so they can see all registered groups
+        $group_types = [
+            ["getGroups" => "getRegisteredMetaListGroupsByEntity", "infix" => "metalist"],
+            ["getGroups" => "getRegisteredFileGroupsByEntity", "infix" => "files"]
         ];
-        $this->registerAgentMetadata("network__ids_files_downloads", $definition);
-        $this->registerSpaceMetadata("network__ids_files_downloads", $definition);
-        // network revisions for downloads
-        $definition = [
-            "label" => i::__("Lista das revisões de rede dos downloads", "mapas-network"),
-            "type" => "json",
-            "default" => []
+        $register_types = [
+            ["class" => \MapasCulturais\Entities\Agent::class, "register" => "registerAgentMetadata"],
+            ["class" => \MapasCulturais\Entities\Space::class, "register" => "registerSpaceMetadata"],
         ];
-        $this->registerAgentMetadata("network__revisions_files_downloads", $definition);
-        $this->registerSpaceMetadata("network__revisions_files_downloads", $definition);
-        // network IDs for links and video lists
-        $definition = [
-            "label" => i::__("Lista dos IDs de rede da lista de links", "mapas-network"),
-            "type" => "json",
-            "default" => []
-        ];
-        $this->registerAgentMetadata("network__ids_metalist_links", $definition);
-        $this->registerSpaceMetadata("network__ids_metalist_links", $definition);
-        $definition = [
-            "label" => i::__("Lista dos IDs de rede da lista de vídeos", "mapas-network"),
-            "type" => "json",
-            "default" => []
-        ];
-        $this->registerAgentMetadata("network__ids_metalist_videos", $definition);
-        $this->registerSpaceMetadata("network__ids_metalist_videos", $definition);
-        // network revisions for links and video lists
-        $definition = [
-            "label" => i::__("Lista das revisões de rede da lista de links", "mapas-network"),
-            "type" => "json",
-            "default" => []
-        ];
-        $this->registerAgentMetadata("network__revisions_metalist_links", $definition);
-        $this->registerSpaceMetadata("network__revisions_metalist_links", $definition);
-        $definition = [
-            "label" => i::__("Lista das revisões de rede da lista de vídeos", "mapas-network"),
-            "type" => "json",
-            "default" => []
-        ];
-        $this->registerAgentMetadata("network__revisions_metalist_videos", $definition);
-        $this->registerSpaceMetadata("network__revisions_metalist_videos", $definition);
-
+        foreach ($group_types as $group_type) {
+            $get_groups = $group_type["getGroups"];
+            $infix = $group_type["infix"];
+            foreach ($register_types as $register_type) {
+                $register = $register_type["register"];
+                $groups = $app->$get_groups($register_type["class"]);
+                foreach ($groups as $group) {
+                    // network IDs
+                    $definition = [
+                        "label" => ("$infix({$group->name}): " . i::__("lista dos IDs de rede", "mapas-network")),
+                        "type" => "json",
+                        "default" => []
+                    ];
+                    $this->$register("network__ids_{$infix}_{$group->name}", $definition);
+                    // network revisions
+                    $definition = [
+                        "label" => ("$infix({$group->name}): " . i::__("lista das revisões de rede", "mapas-network")),
+                        "type" => "json",
+                        "default" => []
+                    ];
+                    $this->$register("network__revisions_{$infix}_{$group->name}", $definition);
+                }
+            }
+        }
         // background jobs
         $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
         $app->registerJobType(new SyncFileJobType(self::JOB_SLUG_FILES, $this));
         $app->registerJobType(new SyncMetaListJobType(self::JOB_SLUG_METALISTS, $this));
         $app->registerJobType(new SyncDeletionJobType(self::JOB_SLUG_DELETION, $this));
+        $app->registerJobType(new SyncDownloadJobType(self::JOB_SLUG_DOWNLOADS, $this));
         return;
     }
 
@@ -405,6 +367,15 @@ class Plugin extends \MapasCulturais\Plugin
         $slug = $this->nodeSlug;
 
         return "network__{$slug}_entity_id";
+    }
+
+    static function ensureNetworkID(\MapasCulturais\Entity $entity)
+    {
+        if (!$entity->network__id) {
+            $uid = uniqid("", true);
+            $entity->network__id = "{$entity->networkRevisionPrefix}:{$uid}";
+        }
+        return;
     }
 
     static function getPrivatePath()
@@ -449,6 +420,12 @@ class Plugin extends \MapasCulturais\Plugin
         $app = App::i();
         $revisions_key = "network__revisions_{$type}_{$group}";
         $revisions = $entity->owner->$revisions_key;
+        if (!in_array(self::SKIP_BEFORE,
+                      ($this->skipList[(string) $entity->owner] ?? []))) {
+            $uid = uniqid("", true);
+            $revisions[] = "{$entity->owner->networkRevisionPrefix}:{$uid}";
+            $entity->owner->$revisions_key = $revisions;
+        }
         $metadata_key = $this->entityMetadataKey;
         $entity->owner->$metadata_key = $entity->owner->id;
         $ids_key = "network__ids_{$type}_{$group}";
@@ -457,6 +434,8 @@ class Plugin extends \MapasCulturais\Plugin
         $ids = (array) $entity->owner->$ids_key;
         unset($ids[$network_id]);
         $entity->owner->$ids_key = $ids;
+        Plugin::ensureNetworkID($entity->owner);
+        $this->skip($entity->owner, [Plugin::SKIP_BEFORE]);
         $entity->owner->save(true);
         $nodes = Plugin::getEntityNodes($entity->owner);
         foreach ($nodes as $node) {
@@ -491,7 +470,7 @@ class Plugin extends \MapasCulturais\Plugin
         return;
     }
 
-    function syncEntity(Entity $entity, string $action)
+    function syncEntity(\MapasCulturais\Entity $entity, string $action)
     {
         $app = App::i();
         $metadata_key = $this->entityMetadataKey;
