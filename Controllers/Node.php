@@ -483,7 +483,7 @@ class Node extends \MapasCulturais\Controller
         $owner_network_id = $this->postData["ownerNetworkID"];
         $class_name = $this->postData["className"];
         $network_id = $this->postData["network__id"];
-        $data = $this->postData["data"];
+        $data = $this->plugin->unserializeEntity($this->postData["data"]);
         $group = $data["group"];
         $revision_key = "network__revisions_files_$group";
         $network_ids_key = "network__ids_files_$group";
@@ -508,7 +508,8 @@ class Node extends \MapasCulturais\Controller
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
-            if (isset($owner->$network_ids_key->$network_id)) {
+            if (isset($owner->$network_ids_key->$network_id) ||
+                in_array($revision_id, $owner->$revision_key)) {
                 $this->json("$network_id $revision_id already exists");
                 return;
             }
@@ -545,7 +546,7 @@ class Node extends \MapasCulturais\Controller
         $owner_network_id = $this->postData["ownerNetworkID"];
         $class_name = $this->postData["className"];
         $network_id = $this->postData["network__id"];
-        $data = $this->postData["data"];
+        $data = $this->plugin->unserializeEntity($this->postData["data"]);
         $group = $data["group"];
         $revision_key = "network__revisions_metalist_$group";
         $network_ids_key = "network__ids_metalist_$group";
@@ -570,7 +571,8 @@ class Node extends \MapasCulturais\Controller
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
-            if (isset($owner->$network_ids_key->$network_id)) {
+            if (isset($owner->$network_ids_key->$network_id) ||
+                in_array($revision_id, $owner->$revision_key)) {
                 $this->json("$network_id $revision_id already exists");
                 return;
             }
@@ -647,7 +649,7 @@ class Node extends \MapasCulturais\Controller
             $revisions[] = $revision_id;
             $owner->$revision_key = $revisions;
             // delete the item
-            $id = $owner->$network_ids_key->$network_id;
+            $id = $owner->$network_ids_key->$network_id ?? null;
             if (!$id) {
                 $this->errorJson("The item $network_id does not exist.", 404);
                 return;
@@ -773,7 +775,7 @@ class Node extends \MapasCulturais\Controller
         $owner_class = $this->postData["ownerClassName"];
         $owner_network_id = $this->postData["ownerNetworkID"];
         $network_id = $this->postData["network__id"];
-        $data = $this->postData["data"];
+        $data = $this->plugin->unserializeEntity($this->postData["data"]);
         $group = $data["group"];
         $revision_key = "network__revisions_metalist_$group";
         $network_ids_key = "network__ids_metalist_$group";

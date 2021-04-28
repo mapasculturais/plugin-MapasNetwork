@@ -21,7 +21,6 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         $network_id = $job->networkID;
         $class_name = $job->className;
         $data = $job->data;
-        //$network_ids_key = "network__ids_metalist_$group";
         $query = new \MapasCulturais\ApiQuery($job->ownerClassName, [
             "network__id" => "EQ({$job->ownerNetworkID})",
             "user" => "EQ({$job->user})"

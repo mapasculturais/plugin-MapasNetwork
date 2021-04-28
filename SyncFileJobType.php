@@ -32,7 +32,7 @@ class SyncFileJobType extends \MapasCulturais\Definitions\JobType
             "className" => $entity->className,
             "network__id" => $network_id,
             $revisions_key => $entity->owner->$revisions_key,
-            "data" => $entity->jsonSerialize(),
+            "data" => $this->plugin->serializeEntity($entity)
         ];
         try {
             $app->log->info("SYNC: $entity -> {$node->url}");
