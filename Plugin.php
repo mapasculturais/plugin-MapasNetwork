@@ -413,6 +413,48 @@ class Plugin extends \MapasCulturais\Plugin
         return $nodes;
     }
 
+    function serializeEntity($value, $get_json_serialize = true) {
+        if($get_json_serialize && $value instanceof Entity) {
+            $value = $value->jsonSerialize();
+        }
+
+        if($value instanceof Entity) {
+            $value = "@entity:{$value->network__id}";
+
+        } else if(is_array($value) || $value instanceof \stdClass) {
+            foreach($value as &$val) {
+                $val = $this->serializeEntity($val, false);
+            }
+        }
+
+        return $value;
+    }
+
+    function unserializeEntity($value) {
+        if(is_string($value) && preg_match('#@entity:(.*)#', $value, $matches)) {
+            $app = App::i();
+            $network__id = $matches[1];
+
+            preg_match("#:(\w+)::#", $network__id, $matches);
+
+            $class = 'MapasCulturais\\Entities\\' . $matches[1];
+
+            $query = new ApiQuery($class, ['network__id' => "EQ({$network__id})"]);
+            
+            $ids = $query->findIds();
+            $id = $ids[0] ?? null;
+
+            $value = $id ? $app->repo($class)->find($id) : null;
+            
+        } else if(is_array($value) || $value instanceof \stdClass) {
+            foreach($value as &$val) {
+                $val = $this->unserializeEntity($val);
+            }
+        }
+
+        return $value;
+    }
+
 
     function requestDeletion(\MapasCulturais\Entity $entity, $action,
                              $group, $type)
