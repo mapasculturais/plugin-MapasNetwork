@@ -22,6 +22,7 @@ class Plugin extends \MapasCulturais\Plugin
     const SKIP_AFTER = "after";
     const SKIP_BEFORE = "before";
 
+    protected $allowedMetaListGroups = ["links", "videos"];
     protected $savedNetworkID = null;
 
     function __construct(array $config = [])
@@ -85,6 +86,53 @@ class Plugin extends \MapasCulturais\Plugin
         /** @var Plugin $plugin */
         $plugin = $this;
 
+        $app->hook("app.register:after", function() use ($plugin) {
+            /** @var \MapasCulturais\App $this */
+            $group_types = [
+                [
+                    "getGroups" => "getRegisteredMetaListGroupsByEntity",
+                    "infix" => "metalist",
+                    "editHook" => "plugin(MapasNetwork).allowedMetaListGroups",
+                    "hookArgs" => [&$plugin->allowedMetaListGroups],
+                ],
+                ["getGroups" => "getRegisteredFileGroupsByEntity", "infix" => "files"]
+            ];
+            $register_types = [
+                ["class" => \MapasCulturais\Entities\Agent::class, "register" => "registerAgentMetadata"],
+                ["class" => \MapasCulturais\Entities\Space::class, "register" => "registerSpaceMetadata"],
+            ];
+            foreach ($group_types as $group_type) {
+                $get_groups = $group_type["getGroups"];
+                $infix = $group_type["infix"];
+                if (isset($group_type["editHook"]) && isset($group_type["hookArgs"])) {
+                    $this->applyHook($group_type["editHook"], $group_type["hookArgs"]);
+                }
+                foreach ($register_types as $register_type) {
+                    $register = $register_type["register"];
+                    $groups = $this->$get_groups($register_type["class"]);
+                    foreach ($groups as $group) {
+                        if (isset($group_type["hookArgs"]) && !in_array($group->name, $group_type["hookArgs"][0])) {
+                            continue;
+                        }
+                        // network IDs
+                        $definition = [
+                            "label" => ("$infix({$group->name}): " . i::__("lista dos IDs de rede", "mapas-network")),
+                            "type" => "json",
+                            "default" => []
+                        ];
+                        $plugin->$register("network__ids_{$infix}_{$group->name}", $definition);
+                        // network revisions
+                        $definition = [
+                            "label" => ("$infix({$group->name}): " . i::__("lista das revisões de rede", "mapas-network")),
+                            "type" => "json",
+                            "default" => []
+                        ];
+                        $plugin->$register("network__revisions_{$infix}_{$group->name}", $definition);
+                    }
+                }
+            }
+            return;
+        });
         $app->hook("mapasculturais.run:before", function () use ($plugin) {
             /** @var \MapasCulturais\App $this */
             if ($this->user->is("guest")) {
@@ -316,39 +364,6 @@ class Plugin extends \MapasCulturais\Plugin
         $this->registerAgentMetadata('network__id', $network_id_metadata);
         $this->registerSpaceMetadata('network__id', $network_id_metadata);
 
-        // should probably add a post-init hook for these so they can see all registered groups
-        $group_types = [
-            ["getGroups" => "getRegisteredMetaListGroupsByEntity", "infix" => "metalist"],
-            ["getGroups" => "getRegisteredFileGroupsByEntity", "infix" => "files"]
-        ];
-        $register_types = [
-            ["class" => \MapasCulturais\Entities\Agent::class, "register" => "registerAgentMetadata"],
-            ["class" => \MapasCulturais\Entities\Space::class, "register" => "registerSpaceMetadata"],
-        ];
-        foreach ($group_types as $group_type) {
-            $get_groups = $group_type["getGroups"];
-            $infix = $group_type["infix"];
-            foreach ($register_types as $register_type) {
-                $register = $register_type["register"];
-                $groups = $app->$get_groups($register_type["class"]);
-                foreach ($groups as $group) {
-                    // network IDs
-                    $definition = [
-                        "label" => ("$infix({$group->name}): " . i::__("lista dos IDs de rede", "mapas-network")),
-                        "type" => "json",
-                        "default" => []
-                    ];
-                    $this->$register("network__ids_{$infix}_{$group->name}", $definition);
-                    // network revisions
-                    $definition = [
-                        "label" => ("$infix({$group->name}): " . i::__("lista das revisões de rede", "mapas-network")),
-                        "type" => "json",
-                        "default" => []
-                    ];
-                    $this->$register("network__revisions_{$infix}_{$group->name}", $definition);
-                }
-            }
-        }
         // background jobs
         $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
         $app->registerJobType(new SyncFileJobType(self::JOB_SLUG_FILES, $this));
@@ -440,12 +455,12 @@ class Plugin extends \MapasCulturais\Plugin
             $class = 'MapasCulturais\\Entities\\' . $matches[1];
 
             $query = new ApiQuery($class, ['network__id' => "EQ({$network__id})"]);
-            
+
             $ids = $query->findIds();
             $id = $ids[0] ?? null;
 
             $value = $id ? $app->repo($class)->find($id) : null;
-            
+
         } else if(is_array($value) || $value instanceof \stdClass) {
             foreach($value as &$val) {
                 $val = $this->unserializeEntity($val);
