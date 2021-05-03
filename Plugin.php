@@ -21,7 +21,7 @@ class Plugin extends \MapasCulturais\Plugin
         $filters = $config['filters'] ?? [];
 
         $config += [
-            'nodeSlug' => $_SERVER['HOSTNAME'] ?? str_replace('.', '', parse_url($app->baseUrl, PHP_URL_HOST)),
+            'nodeSlug' => str_replace('.', '', $_SERVER['HOSTNAME'] ?? parse_url($app->baseUrl, PHP_URL_HOST)),
             'filters' => $filters += [
                 'agent' => [],
                 'space' => []
@@ -295,35 +295,90 @@ class Plugin extends \MapasCulturais\Plugin
         return $value;
     }
 
-    function unserializeEntity($value) {
+    function unserializeEntity($value, Node $not_found_node = null) {
         if(is_string($value) && preg_match('#@entity:(.*)#', $value, $matches)) {
-            $app = App::i();
             $network__id = $matches[1];
-
-            preg_match("#:(\w+)::#", $network__id, $matches);
-
-            $class = 'MapasCulturais\\Entities\\' . $matches[1];
-
-            $query = new ApiQuery($class, ['network__id' => "EQ({$network__id})"]);
-            
-            $ids = $query->findIds();
-            $id = $ids[0] ?? null;
-
-            $value = $id ? $app->repo($class)->find($id) : null;
+            $value = $this->getEntityByNetworkId($network__id, $not_found_node);
             
         } else if(is_array($value) || $value instanceof \stdClass) {
-            foreach($value as &$val) {
-                $val = $this->unserializeEntity($val);
+            foreach($value as $key => &$val) {
+                if (in_array($key, ['terms', 'location'])) {
+                    $val = $val ? (array) $val : null;
+                } else {
+                    $val = $this->unserializeEntity($val, $not_found_node);
+                }
             }
         }
 
         return $value;
     }
 
+    function getEntityByNetworkId($network__id, Node $not_found_node = null) {
+        $app = App::i();
+
+        preg_match("#:(\w+)::#", $network__id, $matches);
+
+        $class_name = 'MapasCulturais\\Entities\\' . $matches[1];
+
+        $query = new ApiQuery($class_name, ['network__id' => "EQ({$network__id})"]);
+        
+        $ids = $query->findIds();
+        $id = $ids[0] ?? null;
+
+
+        $entity = $id ? $app->repo($class_name)->find($id) : null;
+
+        if (!$entity && $not_found_node) {
+            $response = $not_found_node->api->apiGet('network-node/entity', ['network__id' => $network__id]);
+            $entity = $this->createEntity($class_name, $network__id, (array) $response->response);
+        }
+
+        return $entity;
+    }
 
     protected $skipList = [];
 
     function skip($entity) {
         $this->skipList[] = $entity;
+    }
+
+    function createEntity($class_name, $network_id, array $data) {
+        $app = App::i();
+
+        $app->log->debug("creating $network_id");
+
+        $entity = new $class_name;
+
+        $skip_fields = [
+            'id',
+            'user',
+            'userId',
+            'createTimestamp',
+            'updateTimestamp'
+        ];
+
+        $skip_null_fields = [
+            'owner',
+            'parent',
+            'agent'
+        ];
+
+        $data = $this->unserializeEntity($data);
+
+        foreach ($data as $key => $val) {
+            if(in_array($key, $skip_fields)) {
+                continue;
+            }
+
+            if (is_null($val) && in_array($key, $skip_null_fields)) {
+                continue;
+            }
+            
+            $entity->$key = $val;
+        }
+
+        $entity->save(true);
+
+        return $entity;
     }
 }

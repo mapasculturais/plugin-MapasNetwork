@@ -30,8 +30,8 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
         $data = [
             'nodeSlug' => $this->plugin->nodeSlug,
             'className' => $entity->getClassName(),
+            'network__id' => $entity->network__id,
             'data' => $data,
-            'network__id' => $entity->network__id
         ];
 
         try{

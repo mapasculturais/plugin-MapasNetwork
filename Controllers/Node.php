@@ -15,6 +15,8 @@ use MapasCulturais\Exceptions\PermissionDenied;
 use MapasNetwork\Plugin;
 use MapasSDK\MapasSDK;
 use MapasNetwork\Entities as NodeEntities;
+use MapasNetwork\Entities\Node as EntitiesNode;
+use RuntimeException;
 
 class Node extends \MapasCulturais\Controller
 {
@@ -396,44 +398,11 @@ class Node extends \MapasCulturais\Controller
             return;
         }
 
-        $app->log->debug("creating $network_id");
+        $node = $this->getRequestOriginNode();
 
-        $entity = new $class_name;
+        $data = $this->plugin->unserializeEntity($data, $node);
 
-        $skip_fields = [
-            'id',
-            'user',
-            'userId',
-            'createTimestamp',
-            'updateTimestamp'
-        ];
-
-        $skip_null_fields = [
-            'owner',
-            'parent',
-            'agent'
-        ];
-
-
-        $data = $this->plugin->unserializeEntity($data);
-
-        foreach ($data as $key => $val) {
-            if(in_array($key, $skip_fields)) {
-                continue;
-            }
-
-            if (is_null($val) && in_array($key, $skip_null_fields)) {
-                continue;
-            }
-
-            if($key == 'terms') {
-                $val = (array) $val;
-            }
-
-            $entity->$key = $val;
-        }
-
-        $entity->save(true);
+        $this->plugin->createEntity($class_name, $network_id, $data);
     }
 
     function POST_updatedEntity() {
@@ -496,15 +465,13 @@ class Node extends \MapasCulturais\Controller
                 'agent',
             ];
 
-            $data = $this->plugin->unserializeEntity($data);
+            $node = $this->getRequestOriginNode();
 
+            $data = $this->plugin->unserializeEntity($data, $node);
+            
             foreach ($data as $key => $val) {
                 if(in_array($key, $skip_fields)) {
                     continue;
-                }
-
-                if($key == 'terms') {
-                    $val = (array) $val;
                 }
 
                 $entity->$key = $val;
@@ -516,5 +483,49 @@ class Node extends \MapasCulturais\Controller
         }
 
     }
-    
+
+    function GET_entity() {
+        $this->requireAuthentication();
+        
+        $network__id = $this->data['network__id'];
+
+        if (!$network__id) {
+            $this->errorJson("network__id is required", 400);
+            return;
+        }
+        
+        $entity = $this->plugin->getEntityByNetworkId($network__id);
+
+        if (!$entity) {
+            $this->errorJson("entity not found", 404);
+        }
+
+        $entity->checkPermission('@control');
+
+        $data = $this->plugin->serializeEntity($entity);
+
+        $this->json($data);
+    }
+
+    /**
+     * Retorna o nó que está fazendo a requisição
+     * @return NodeEntities\Node
+     * @throws RuntimeException 
+     */
+    function getRequestOriginNode()
+    {
+        $app = App::i();
+
+        $node_slug = $this->postData['nodeSlug'] ?? null;
+        
+        $nodes = $app->repo(EntitiesNode::class)->findBy(['user' => $app->user]);
+
+        foreach ($nodes as $node) {
+            if($node->slug == $node_slug) {
+                return $node;
+            }
+        }
+
+        return null;
+    }
 }
