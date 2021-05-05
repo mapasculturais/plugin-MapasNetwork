@@ -54,7 +54,6 @@ class Node extends \MapasCulturais\Controller
         $app = App::i();
 
         $_SESSION["mapas-network:confirmed"] = true;
-        $_SESSION["mapas-network:profileSource"] = $this->data["profileSource"];
 
         $app->redirect($this->createUrl("connect"));
     }
@@ -205,13 +204,11 @@ class Node extends \MapasCulturais\Controller
         $create_token = $this->data['token'] ?? $_SESSION['mapas-network:token'] ?? null;
         $name = base64_decode($this->data['name'] ?? null) ?? $_SESSION['mapas-network:name'] ?: $connect_to;
         $isConfirmed = $_SESSION['mapas-network:confirmed'] ?? null;
-        $profile_source = $_SESSION["mapas-network:profileSource"] ?? $this->data["profileSource"] ?? "origin";
 
         $_SESSION['mapas-network:to'] = $connect_to;
         $_SESSION['mapas-network:token'] = $create_token;
         $_SESSION['mapas-network:name'] = $name;
         $_SESSION['mapas-network:confirmed'] = $isConfirmed;
-        $_SESSION["mapas-network:profileSource"] = $profile_source;
 
         $this->requireAuthentication();
 
@@ -245,7 +242,7 @@ class Node extends \MapasCulturais\Controller
 
                 $site_name = urlencode(base64_encode($app->siteName));
 
-                $app->redirect("{$connect_to}{$this->id}/return?from={$app->baseUrl}&token={$create_token}&s={$create_secret}&returnToken={$connect_token}&name={$site_name}&profileSource={$profile_source}");
+                $app->redirect("{$connect_to}{$this->id}/return?from={$app->baseUrl}&token={$create_token}&s={$create_secret}&returnToken={$connect_token}&name={$site_name}");
             }
         }
     }
@@ -259,14 +256,12 @@ class Node extends \MapasCulturais\Controller
         $create_secret = $_SESSION['mapas-network:secret'] ?? $this->data['s'] ?? null;
         $connect_token = $_SESSION['mapas-network:returnToken'] ?? $this->data['returnToken'] ?? null;
         $name = $_SESSION['mapas-network:name'] ?? base64_decode($this->data['name'] ?? null) ?: $connect_from;
-        $profile_source = $_SESSION["mapas-network:profileSource"] ?? $this->data["profileSource"] ?? "origin";
 
         $_SESSION['mapas-network:from'] = $connect_from;
         $_SESSION['mapas-network:token'] = $create_token;
         $_SESSION['mapas-network:secret'] = $create_secret;
         $_SESSION['mapas-network:returnToken'] = $connect_token;
         $_SESSION['mapas-network:name'] = $name;
-        $_SESSION["mapas-network:profile-source"] = $profile_source;
 
         $this->requireAuthentication();
 
@@ -276,7 +271,6 @@ class Node extends \MapasCulturais\Controller
             $_SESSION['mapas-network:secret'],
             $_SESSION['mapas-network:returnToken'],
             $_SESSION['mapas-network:name'],
-            $_SESSION["mapas-network:profileSource"]
         );
 
         if ($connect_token && $this->checkTokenSecret($create_token, $create_secret, true)) {
@@ -305,16 +299,7 @@ class Node extends \MapasCulturais\Controller
                     "connect_to" => $app->baseUrl,
                     "name" => $app->siteName
                 ]);
-                if ($profile_source == "source") {
-                    $metadata_key = $this->plugin->entityMetadataKey;
-                    $app->user->profile->$metadata_key = $app->user->profile->id;
-                    $app->enqueueJob(Plugin::JOB_SLUG, [
-                        "syncAction" => "bootstrapSync",
-                        "entity" => $app->user->profile,
-                        "node" => $node,
-                        "nodeSlug" => $node->slug
-                    ]);
-                }
+
                 $app->redirect($this->createUrl('panel'));
             }
         }
@@ -368,58 +353,6 @@ class Node extends \MapasCulturais\Controller
         );
 
         $app->redirect($url);
-    }
-
-    /**
-     * WIP; needs to be tested for circular subgraphs and destination
-     * overwriting the source, and updated to account for File and MetaList
-     * This is a special Agent-only sync for use in the initial link and its
-     * propagation. It differs from a normal update sync in that the receiving
-     * entity is automatically the user's profile and its network ID may be
-     * rewritten entirely (this will be the case when two accounts with
-     * pre-existing, unconnected link graphs are linked together). The select
-     * in the confirmation page determines where this is called.
-     */
-    function POST_bootstrapSync()
-    {
-        $this->requireAuthentication();
-        $app = App::i();
-        $wrong_auth = false;
-        $user_app = $app->auth->userApp;
-        if (!isset($user_app)) {
-            $wrong_auth = true;
-        } else {
-            $query = new ApiQuery(NodeEntities\Node::class, [
-                "userApp" => "EQ({$app->auth->userApp->publicKey})"
-            ]);
-            $nodes = $query->findIds();
-            if ((count($nodes) < 1)) {
-                $wrong_auth = true;
-            }
-        }
-        if ($wrong_auth) {
-            $this->errorJson("Wrong authentication type for this operation.", 401);
-            return;
-        }
-        $node_slug = $this->postData["nodeSlug"];
-        $class_name = $this->postData["className"];
-        $network_id = $this->postData["network__id"];
-        $data = $this->postData["data"];
-        $entity = $app->user->profile;
-        if ($class_name != Agent::class) {
-            // @todo arrumar esse throw
-            throw new PermissionDenied($app->user, $app->user, "establish a bootstrap link to something other than an Agent");
-        }
-        $old_networkd_id = $entity->network__id ?? "";
-        $entity->network__id = $network_id;
-        $entity->{"network__{$node_slug}->entity->id"} = $data["id"];
-        $this->writeEntityFields($entity, $data);
-        $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
-        $entity->save(true);
-        if ($network_id != $old_networkd_id) {
-            $this->plugin->syncEntity($entity, "bootstrapSync");
-        }
-        return;
     }
 
     function POST_createdEntity()
