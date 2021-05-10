@@ -448,20 +448,20 @@ class Plugin extends \MapasCulturais\Plugin
         return $nodes;
     }
 
-    function serializeEntity($value, $get_json_serialize = true) {
-        if($get_json_serialize && $value instanceof Entity) {
+    function serializeEntity($value, $get_json_serialize=true)
+    {
+        if ($get_json_serialize && ($value instanceof Entity)) {
             $value = $value->jsonSerialize();
         }
-
-        if($value instanceof Entity) {
+        if ($value instanceof Entity) {
             $value = "@entity:{$value->network__id}";
-
-        } else if(is_array($value) || $value instanceof \stdClass) {
-            foreach($value as &$val) {
+        } else if (is_array($value) || ($value instanceof \stdClass)) {
+            foreach ($value as &$val) {
                 $val = $this->serializeEntity($val, false);
             }
+        } else if ($value instanceof \JsonSerializable) {
+            $value = $value->jsonSerialize();
         }
-
         return $value;
     }
 
