@@ -222,7 +222,13 @@ class Node extends \MapasCulturais\Entity
     /** @ORM\PrePersist */
     public function prePersist($args=null) { parent::prePersist($args); }
     /** @ORM\PostPersist */
-    public function postPersist($args=null) { parent::postPersist($args); }
+    public function postPersist($args=null) { 
+        $app = App::i();
+        
+        $app->enqueueJob(Plugin::JOB_SLUG_BOOTSTRAP, ['node' => $this]);
+
+        parent::postPersist($args); 
+    }
 
     /** @ORM\PreRemove */
     public function preRemove($args=null) { parent::preRemove($args); }

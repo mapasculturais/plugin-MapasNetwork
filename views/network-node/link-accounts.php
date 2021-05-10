@@ -15,7 +15,6 @@ $this->layout = 'nolayout'; ?>
             Confirme se você deseja fazer a vinculação
         </p>
 
-        <form action="<?=$this->controller->createUrl("confirmLinkAccount")?>" method="get">
         <div class="integration">
             <div class="roadmap">
                 <div class="top"></div>
@@ -30,9 +29,9 @@ $this->layout = 'nolayout'; ?>
                         <img src="<?php $this->asset('img/avatar--agent.png'); ?>" alt="">
                     </div>
                     <div class="content">
-                        <!-- Email da conta de origem
-                        <p></p>
-                        -->
+						<!-- Email da conta de origem
+						<p></p>
+						-->
                         <a href="" target="_blank" rel="noopener noreferrer"><?php echo $origin_name; ?></a>
                     </div>
                 </div>
@@ -45,29 +44,17 @@ $this->layout = 'nolayout'; ?>
                         <a href="" target="_blank" rel="noopener noreferrer"><?php $this->dict('site: name'); ?></a>
                     </div>
                 </div>
-                <div>
-                    <label for="profile-source">Usar o perfil:</label>
-                    <select name="profileSource" id="profile-source">
-                        <option value="source">do <?=$origin_name?></option>
-                        <option value="destination">do <?=$this->dict("site: name")?></option>
-                    </select>
-                </div>
             </div>
         </div>
 
         <footer>
-            <!--
-            <a href="<?php echo $this->controller->createUrl('cancelAccountLink'); ?>">
-                <button>Cancelar</button>
-            </a>
-            <a href="<?php echo $this->controller->createUrl('confirmLinkAccount'); ?>">
-                <button>Confirmar</button>
-            </a>
-            -->
-            <input type="submit" value="Cancelar" formaction="<?=$this->controller->createUrl("cancelAccountLink")?>" />
-            <input type="submit" value="Confirmar" />
+	        <a href="<?php echo $this->controller->createUrl('cancelAccountLink'); ?>">
+		        <button>Cancelar</button>
+	        </a>
+	        <a href="<?php echo $this->controller->createUrl('confirmLinkAccount'); ?>">
+		        <button>Confirmar</button>
+	        </a>
         </footer>
-        </form>
     </div>
 
 </div>

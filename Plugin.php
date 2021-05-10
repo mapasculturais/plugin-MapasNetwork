@@ -2,6 +2,7 @@
 
 namespace MapasNetwork;
 
+use Closure;
 use Doctrine\ORM\OptimisticLockException;
 use Doctrine\ORM\ORMInvalidArgumentException;
 use Doctrine\ORM\TransactionRequiredException;
@@ -11,6 +12,10 @@ use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entity;
 use MapasCulturais\i;
+
+use MapasCulturais\Entities\Agent;
+use MapasCulturais\Entities\Space;
+
 use MapasNetwork\Entities\Node;
 use MapasSDK\Exceptions\BadRequest;
 use MapasSDK\Exceptions\Unauthorized;
@@ -29,6 +34,9 @@ class Plugin extends \MapasCulturais\Plugin
     const JOB_SLUG_DOWNLOADS = "network__sync_download_files";
     const JOB_SLUG_FILES = "network__sync_entity_files";
     const JOB_SLUG_METALISTS = "network__sync_entity_metalists";
+    const JOB_SLUG_BOOTSTRAP = "network__node_bootstrap";
+    const JOB_UPDATE_NETWORK_ID = 'network__update_network_id';
+
     const SKIP_AFTER = "after";
     const SKIP_BEFORE = "before";
 
@@ -380,6 +388,8 @@ class Plugin extends \MapasCulturais\Plugin
         $app->registerJobType(new SyncMetaListJobType(self::JOB_SLUG_METALISTS, $this));
         $app->registerJobType(new SyncDeletionJobType(self::JOB_SLUG_DELETION, $this));
         $app->registerJobType(new SyncDownloadJobType(self::JOB_SLUG_DOWNLOADS, $this));
+        $app->registerJobType(new NodeBootstrapJobType(self::JOB_SLUG_BOOTSTRAP, $this));
+        $app->registerJobType(new UpdateNetworkIdJobType(self::JOB_UPDATE_NETWORK_ID, $this));
         return;
     }
 
@@ -544,6 +554,20 @@ class Plugin extends \MapasCulturais\Plugin
             }
         }
         return;
+    }
+
+    /**
+     * Executa o $cb para cada nó que tenha a entidade
+     * 
+     * $cb = function ($node, $entity) use(...) {...}
+     */
+    function foreachEntityNodeDo($entity, Closure $cb) {
+        $nodes = Plugin::getEntityNodes($entity->owner);
+        foreach ($nodes as $node) {
+            if (Plugin::checkNodeFilter($node, $entity->owner)) {
+                $cb($node, $entity);
+            }
+        }
     }
 
     protected $skipList = [];

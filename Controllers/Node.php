@@ -2,10 +2,13 @@
 
 namespace MapasNetwork\Controllers;
 
+use DateTime;
 use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
+use MapasCulturais\Entity;
 use MapasCulturais\Entities\UserApp;
 use MapasCulturais\i;
+use MapasCulturais\Utils;
 use MapasCulturais\Traits;
 
 use MapasCulturais\Entities\Agent;
@@ -270,7 +273,7 @@ class Node extends \MapasCulturais\Controller
             $_SESSION['mapas-network:token'],
             $_SESSION['mapas-network:secret'],
             $_SESSION['mapas-network:returnToken'],
-            $_SESSION['mapas-network:name'],
+            $_SESSION['mapas-network:name']
         );
 
         if ($connect_token && $this->checkTokenSecret($create_token, $create_secret, true)) {
@@ -815,6 +818,222 @@ class Node extends \MapasCulturais\Controller
         $data = $this->plugin->serializeEntity($entity);
 
         $this->json($data);
+    }
+
+    function POST_bootstrapSync () 
+    {
+        $this->requireAuthentication();
+
+        $app = App::i();
+
+        $agents_data = $this->postData['agents'] ?? [];
+        $origin_node = $this->getRequestOriginNode();
+        
+        $entities = array_merge($app->user->getEnabledAgents(), $app->user->getEnabledSpaces());
+        foreach($agents_data as $foreign_data) {
+            $linked = false;
+            foreach($entities as $entity) {
+                if ($this->compareEntityData($entity, $foreign_data)) {
+                    $linked = true;
+                    $entity->{"network__{$origin_node->slug}_entity_id"} = $foreign_data['id'];
+                    
+                    $data = [];
+
+                    $agent_updated = $entity->updateTimestamp ?? $entity->createTimestamp;
+                    $foreign_updated = new DateTime($foreign_data['updateTimestamp']['date'] ?? $foreign_data['createTimestamp']['date']);
+
+                    // faz merge das infos que vieram no request com a info do agente, mantendo a versão mais nova da info.
+                    foreach($foreign_data as $key => $val) {
+                        if ($val == $entity->$key) {
+                            continue;
+                        }
+                        if ($val && $entity->$key) {
+                            
+                            // se a informação local é mais nova que a informação que veio no request
+                            // @todo: o ideal é verificar no histórico de revisões a data que foi preenchida a info
+                            if ($agent_updated > $foreign_updated) {
+                                $data[$key] = $entity->$key;
+                            } else {
+                                $data[$key] = $val;
+                            }
+                        } else if($val) {
+                            $data[$key] = $val;
+                        } else if($entity->$key) {
+                            $data[$key] = $entity->$key;
+                        }
+                    }
+                    $this->writeEntityFields($entity, $data);
+
+                    $fdate = new DateTime($foreign_data['createTimestamp']['date']);
+                    if($fdate < $entity->createTimestamp){
+                        $new_network__id = $foreign_data['network__id'];
+                        $current_network__id = $entity->network__id;
+
+                        $entity->network__id = $new_network__id;
+
+                        $skip_node = $this->getRequestOriginNode();
+                        $this->plugin->foreachEntityNodeDo($entity, function($node, $entity) use($app, $skip_node, $current_network__id, $new_network__id) {
+                            if($node->equals($skip_node)){
+                                return;
+                            }
+                            $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
+                                'entity' => $entity, 
+                                'node' => $node,
+                                'current_network__id' => $current_network__id,
+                                'new_network__id' => $new_network__id
+                            ]);
+                        });
+                    }
+
+                    $entity->save(true);
+                }
+            }
+
+            if (!$linked) {
+                $app->log->debug(print_r($foreign_data, true));
+                // $this->plugin->createEntity($entity->getClassName(), $foreign_data['network__id'], $foreign_data);
+            }
+        }
+    }
+
+    function POST_updateEntityNetworkId() 
+    {
+        $this->requireAuthentication();
+
+        $app = App::i();
+
+        $class_name = $this->data['className'];
+        $current_network__id = $this->data['current_network__id'];
+        $new_network__id = $this->data['new_network__id'];
+
+        if ($current_network__id == $new_network__id) {
+            $this->errorJson('current_network__id and new_network__id are the same', 400);
+        }
+
+        $classes = [
+            Agent::class,
+            Space::class,
+        ];
+
+        if (!in_array($class_name, $classes)) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user, 'update');
+        }
+
+        $query = new ApiQuery($class_name, [
+            "network__id" => "EQ({$current_network__id})",
+            "user" => "EQ({$app->user->id})"
+        ]);
+
+        if ($ids = $query->findIds()) {
+            $id = $ids[0];
+
+            $entity = $app->repo($class_name)->find($id);
+
+            $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
+
+            $entity->network__id = $new_network__id;
+
+            $entity->save(true);
+
+            $skip_node = $this->getRequestOriginNode();
+
+            $this->plugin->foreachEntityNodeDo($entity, function($node, $entity) use($app, $skip_node, $current_network__id, $new_network__id) {
+                if($node->equals($skip_node)){
+                    return;
+                }
+                $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
+                    'entity' => $entity, 
+                    'node' => $node,
+                    'current_network__id' => $current_network__id,
+                    'new_network__id' => $new_network__id
+                ]);
+            });
+        }
+    }
+    function compareEntityData(Entity $entity, array $foreign_data) {
+        if($entity instanceof Agent) {
+            return $this->compareAgentData($entity, $foreign_data);
+        } else if ($entity instanceof Space) {
+            return $this->compareSpaceData($entity, $foreign_data);
+        }
+    }
+
+    function compareAgentData(Agent $agent, array $foreign_data) {
+        $data = (object) $foreign_data;
+
+        // verifica se é o mesmo tipo
+        if ($data->type != (string) $agent->type) {
+            return false;
+        }
+
+        $anetwork__id = $agent->network__id ?? '';
+        $fnetwork__id = $data->network__id ?? '';
+        if ($anetwork__id && $anetwork__id == $fnetwork__id) {
+            return true;
+        }
+
+        //verifica se o número de documento é igual
+        $fdoc = preg_replace('#[^0-9]#', '', $data->documento ?? '');
+        $adoc = preg_replace('#[^0-9]#', '', $agent->documento ?? '');
+
+        if ($adoc && $fdoc == $adoc) {
+            return true;
+        }
+
+        if ($data->nomeCompleto ?? null) {
+            $fname = Utils::slugify($data->nomeCompleto);
+            $aname = Utils::slugify($agent->nomeCompleto ?? '');
+
+            if(Utils::isTheSameName($fname, $aname)) {
+                return true;
+            }
+        }
+
+        if ($data->name ?? null) {
+            $fname = Utils::slugify($data->name);
+            $aname = Utils::slugify($agent->name ?? '');
+
+            if(Utils::isTheSameName($fname, $aname)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function compareSpaceData(Space $space, array $foreign_data) {
+        $data = (object) $foreign_data;
+
+        // verifica se é o mesmo tipo
+        if ($data->type != (string) $space->type) {
+            return false;
+        }
+
+        $anetwork__id = $space->network__id ?? '';
+        $fnetwork__id = $data->network__id ?? '';
+        if ($anetwork__id && $anetwork__id == $fnetwork__id) {
+            return true;
+        }
+
+        //verifica se o número de documento é igual
+        $fdoc = preg_replace('#[^0-9]#', '', $data->cnpj ?? '');
+        $adoc = preg_replace('#[^0-9]#', '', $space->cnpj ?? '');
+
+        if ($adoc && $fdoc == $adoc) {
+            return true;
+        }
+
+        if ($data->name ?? null) {
+            $fname = Utils::slugify($data->name);
+            $aname = Utils::slugify($space->name ?? '');
+
+            if(Utils::isTheSameName($fname, $aname)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
