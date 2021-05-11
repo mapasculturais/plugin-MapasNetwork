@@ -25,6 +25,7 @@ class UpdateNetworkIdJobType extends \MapasCulturais\Definitions\JobType
         $data = [
             'className' => $entity->className,
             'current_network__id' => $job->current_network__id,
+            'nodeSlug' => $this->plugin->nodeSlug,
             'new_network__id' => $job->new_network__id
         ];
 

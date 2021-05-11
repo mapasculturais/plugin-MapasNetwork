@@ -844,6 +844,10 @@ class Node extends \MapasCulturais\Controller
 
                     // faz merge das infos que vieram no request com a info do agente, mantendo a versão mais nova da info.
                     foreach($foreign_data as $key => $val) {
+                        if(in_array($key, ['network__id', 'createTimestamp', 'update_timestamp', 'network__revisions'])) {
+                            continue;
+                        }
+
                         if ($val == $entity->$key) {
                             continue;
                         }
@@ -886,12 +890,12 @@ class Node extends \MapasCulturais\Controller
                     }
 
                     $entity->save(true);
+                    $app->log->debug("LINKED: {$entity} => {$entity->network__id}");
                 }
             }
 
             if (!$linked) {
-                $app->log->debug(print_r($foreign_data, true));
-                // $this->plugin->createEntity($entity->getClassName(), $foreign_data['network__id'], $foreign_data);
+                $this->plugin->createEntity($entity->getClassName(), $foreign_data['network__id'], $foreign_data);
             }
         }
     }
@@ -935,6 +939,8 @@ class Node extends \MapasCulturais\Controller
             $entity->network__id = $new_network__id;
 
             $entity->save(true);
+
+            $app->log->debug("UPDATED: {$entity} => {$entity->network__id}");
 
             $skip_node = $this->getRequestOriginNode();
 
@@ -1046,9 +1052,10 @@ class Node extends \MapasCulturais\Controller
         $app = App::i();
 
         $node_slug = $this->postData['nodeSlug'] ?? null;
+
         
         $nodes = $app->repo(EntitiesNode::class)->findBy(['user' => $app->user]);
-
+                
         foreach ($nodes as $node) {
             if($node->slug == $node_slug) {
                 return $node;

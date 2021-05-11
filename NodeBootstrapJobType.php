@@ -3,6 +3,7 @@ namespace MapasNetwork;
 
 use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
+use MapasCulturais\Entities\Agent;
 use MapasCulturais\Entities\Job;
 
 class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
@@ -24,12 +25,12 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         $user = $node->user;
 
         $map_ids = function ($entity) { return $entity->id; };
-        $map_serialize = function ($entity) { return $entity->jsonSerialize(); };
+        $map_serialize = function ($entity) { return $this->plugin->serializeEntity($entity); };
 
         $agents_args = $node->getFilters(Agent::class);
         $agent_ids = array_map($map_ids, $user->getEnabledAgents());
         $agents_args['id'] = 'IN(' . implode(',', $agent_ids) . ')';
-        $agents_query = new ApiQuery(Agesnt::class, $agents_args);
+        $agents_query = new ApiQuery(Agent::class, $agents_args);
         $agent_ids = $agents_query->findIds();
         $agents = $app->repo('Agent')->findBy(['id' => $agent_ids]);
 
@@ -45,7 +46,7 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         }
 
         $data = [
-            "nodeSlug" => $this->nodeSlug,
+            "nodeSlug" => $this->plugin->nodeSlug,
             'agents' => array_map($map_serialize, $agents),
             'spaces' => array_map($map_serialize, $spaces),
         ];

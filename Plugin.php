@@ -477,11 +477,11 @@ class Plugin extends \MapasCulturais\Plugin
             $value = $this->getEntityByNetworkId($network__id, $not_found_node);
             
         } else if(is_array($value) || $value instanceof \stdClass) {
-            foreach($value as $key => &$val) {
-                if (in_array($key, ['terms', 'location'])) {
-                    $val = $val ? (array) $val : null;
+            foreach($value as $key => $val) {
+                if (in_array((string)$key, ['terms', 'location'])) {
+                    $value[$key] = $val ? (array) $val : null;
                 } else {
-                    $val = $this->unserializeEntity($val, $not_found_node);
+                    $value[$key] = $this->unserializeEntity($val, $not_found_node);
                 }
             }
         }
@@ -675,7 +675,6 @@ class Plugin extends \MapasCulturais\Plugin
         }
 
         $entity->save(true);
-
         return $entity;
     }
 }

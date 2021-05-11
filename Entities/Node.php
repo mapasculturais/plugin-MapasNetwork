@@ -201,7 +201,7 @@ class Node extends \MapasCulturais\Entity
         $app = App::i();
         $cache_key = $this->url . ':filters';
 
-        if (false && $app->cache->contains($cache_key)) {
+        if ($app->cache->contains($cache_key)) {
             $filters = $app->cache->fetch($cache_key);
         } else {
             $response = $this->api->apiGet('network-node/filters');
