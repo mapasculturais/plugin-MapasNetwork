@@ -61,7 +61,9 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
             "error" => 0,
             "size" => $sz
         ]);
-        $file->description = $data["description"];
+        if (isset($data["description"])) {
+            $file->description = $data["description"];
+        }
         $file->group = $data["group"];
         $file->owner = $owner;
         // inform network ID to the plugin and prevent it from being created again

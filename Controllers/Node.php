@@ -820,7 +820,7 @@ class Node extends \MapasCulturais\Controller
         $this->json($data);
     }
 
-    function POST_bootstrapSync () 
+    function POST_bootstrapSync()
     {
         $this->requireAuthentication();
 
@@ -843,8 +843,8 @@ class Node extends \MapasCulturais\Controller
                     $foreign_updated = new DateTime($foreign_data['updateTimestamp']['date'] ?? $foreign_data['createTimestamp']['date']);
 
                     // faz merge das infos que vieram no request com a info do agente, mantendo a versão mais nova da info.
-                    foreach($foreign_data as $key => $val) {
-                        if(in_array($key, ['network__id', 'createTimestamp', 'update_timestamp', 'network__revisions'])) {
+                    foreach ($foreign_data as $key => $val) {
+                        if (in_array($key, ['network__id', 'createTimestamp', 'update_timestamp', 'network__revisions'])) {
                             continue;
                         }
 
@@ -852,18 +852,13 @@ class Node extends \MapasCulturais\Controller
                             continue;
                         }
                         if ($val && $entity->$key) {
-                            
                             // se a informação local é mais nova que a informação que veio no request
                             // @todo: o ideal é verificar no histórico de revisões a data que foi preenchida a info
-                            if ($agent_updated > $foreign_updated) {
-                                $data[$key] = $entity->$key;
-                            } else {
+                            if ($agent_updated <= $foreign_updated) {
                                 $data[$key] = $val;
                             }
                         } else if($val) {
                             $data[$key] = $val;
-                        } else if($entity->$key) {
-                            $data[$key] = $entity->$key;
                         }
                     }
                     $this->writeEntityFields($entity, $data);
@@ -877,7 +872,7 @@ class Node extends \MapasCulturais\Controller
 
                         $skip_node = $this->getRequestOriginNode();
                         $this->plugin->foreachEntityNodeDo($entity, function($node, $entity) use($app, $skip_node, $current_network__id, $new_network__id) {
-                            if($node->equals($skip_node)){
+                            if ($node->equals($skip_node)) {
                                 return;
                             }
                             $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [

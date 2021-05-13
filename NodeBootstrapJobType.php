@@ -5,6 +5,7 @@ use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entities\Agent;
 use MapasCulturais\Entities\Job;
+use MapasCulturais\Entities\Space;
 
 class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
 {
@@ -36,7 +37,7 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
 
         $spaces_args = $node->getFilters(Space::class);
         $space_ids = array_map($map_ids, $user->getEnabledSpaces());
-        if($space_ids) {
+        if ($space_ids) {
             $spaces_args['id'] = 'IN(' . implode(',', $space_ids) . ')';
             $spaces_query = new ApiQuery(Space::class, $spaces_args);
             $space_ids = $spaces_query->findIds();

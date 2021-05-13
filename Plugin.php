@@ -106,47 +106,47 @@ class Plugin extends \MapasCulturais\Plugin
 
         $app->hook("app.register:after", function() use ($plugin) {
             /** @var \MapasCulturais\App $this */
-            $group_types = [
-                [
-                    "getGroups" => "getRegisteredMetaListGroupsByEntity",
-                    "infix" => "metalist",
-                    "editHook" => "plugin(MapasNetwork).allowedMetaListGroups",
-                    "hookArgs" => [&$plugin->allowedMetaListGroups],
-                ],
-                ["getGroups" => "getRegisteredFileGroupsByEntity", "infix" => "files"]
-            ];
             $register_types = [
-                ["class" => \MapasCulturais\Entities\Agent::class, "register" => "registerAgentMetadata"],
-                ["class" => \MapasCulturais\Entities\Space::class, "register" => "registerSpaceMetadata"],
+                ["class" => \MapasCulturais\Entities\Agent::class, "registerFunction" => "registerAgentMetadata"],
+                ["class" => \MapasCulturais\Entities\Space::class, "registerFunction" => "registerSpaceMetadata"],
             ];
-            foreach ($group_types as $group_type) {
-                $get_groups = $group_type["getGroups"];
-                $infix = $group_type["infix"];
-                if (isset($group_type["editHook"]) && isset($group_type["hookArgs"])) {
-                    $this->applyHook($group_type["editHook"], $group_type["hookArgs"]);
-                }
-                foreach ($register_types as $register_type) {
-                    $register = $register_type["register"];
-                    $groups = $this->$get_groups($register_type["class"]);
-                    foreach ($groups as $group) {
-                        if (isset($group_type["hookArgs"]) && !in_array($group->name, $group_type["hookArgs"][0])) {
-                            continue;
-                        }
-                        // network IDs
-                        $definition = [
-                            "label" => ("$infix({$group->name}): " . i::__("lista dos IDs de rede", "mapas-network")),
-                            "type" => "json",
-                            "default" => []
-                        ];
-                        $plugin->$register("network__ids_{$infix}_{$group->name}", $definition);
-                        // network revisions
-                        $definition = [
-                            "label" => ("$infix({$group->name}): " . i::__("lista das revisões de rede", "mapas-network")),
-                            "type" => "json",
-                            "default" => []
-                        ];
-                        $plugin->$register("network__revisions_{$infix}_{$group->name}", $definition);
+            $ids_label = i::__("lista dos IDs de rede", "mapas-network");
+            $revisions_label = i::__("lista das revisões de rede", "mapas-network");
+            // metalist groups
+            foreach ($register_types as $type) {
+                $register_function = $type["registerFunction"];
+                $groups = $this->getRegisteredMetaListGroupsByEntity($type["class"]);
+                // for metalists, we have a default list of groups that hooks can add to;
+                // this is because metalists used by the Reports module should not be synchronised
+                $this->applyHook("plugin(MapasNetwork).syncMetaListGroups", [&$plugin->allowedMetaListGroups]);
+                foreach ($groups as $group) {
+                    if (!in_array($group->name, $plugin->allowedMetaListGroups)) {
+                        continue;
                     }
+                    $plugin->$register_function("network__ids_metalist_{$group->name}", [
+                        "label" => ("metalist({$group->name}): $ids_label"),
+                        "type" => "json",
+                        "default" => []
+                    ]);
+                    $plugin->$register_function("network__revisions_metalist_{$group->name}", [
+                        "label" => ("metalist({$group->name}): $revisions_label"),
+                        "type" => "json",
+                        "default" => []
+                    ]);
+                }
+                $groups = $this->getRegisteredFileGroupsByEntity($type["class"]);
+                $this->applyHook("plugin(MapasNetwork).syncFileGroups", [&$groups]);
+                foreach ($groups as $group) {
+                    $plugin->$register_function("network__ids_files_{$group->name}", [
+                        "label" => ("files({$group->name}): $ids_label"),
+                        "type" => "json",
+                        "default" => []
+                    ]);
+                    $plugin->$register_function("network__revisions_files_{$group->name}", [
+                        "label" => ("files({$group->name}): $revisions_label"),
+                        "type" => "json",
+                        "default" => []
+                    ]);
                 }
             }
             return;
@@ -217,9 +217,12 @@ class Plugin extends \MapasCulturais\Plugin
             return;
         });
 
-        $metalist_hook_component = "metalist(<<links|videos>>)";
+        $metalist_hook_component = "metalist(<<*>>)";
         $app->hook("$entities_hook_prefix.$metalist_hook_component.insert:before", function () use ($plugin) {
             /** @var MapasCulturais\Entities\MetaList $this */
+            if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
+                return;
+            }
             if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
@@ -245,6 +248,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.insert:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
+            if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
+                return;
+            }
             $ids_key = "network__ids_metalist_{$this->group}";
             $ids = (array) $this->owner->$ids_key ?? [];
             if (array_search($this->id, $ids) === false) {
@@ -257,6 +263,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.update:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
+            if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
+                return;
+            }
             if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
@@ -272,6 +281,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
+            if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
+                return;
+            }
             if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this->owner] ?? []))) {
                 return;
             }
@@ -280,6 +292,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix.$metalist_hook_component.remove:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
+            if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
+                return;
+            }
             $plugin->requestDeletion($this, "deletedMetaList", $this->group, "metalist");
             return;
         });
@@ -327,7 +342,6 @@ class Plugin extends \MapasCulturais\Plugin
         });
         return;
     }
-
 
     /**
      * Verifica se o nó deve receber a entidade
@@ -453,7 +467,7 @@ class Plugin extends \MapasCulturais\Plugin
         if ($get_json_serialize && ($value instanceof Entity)) {
             $value = $value->jsonSerialize();
         }
-        if ($value instanceof Entity) {
+        if (($value instanceof Entity) && $value->usesMetadata()) {
             $value = "@entity:{$value->network__id}";
         } else if (is_array($value) || ($value instanceof \stdClass)) {
             foreach ($value as &$val) {
@@ -466,26 +480,33 @@ class Plugin extends \MapasCulturais\Plugin
     }
 
     /**
-     * 
-     * @param mixed $value 
-     * @param Node|null $not_found_node 
-     * @return mixed 
+     *
+     * @param mixed $value
+     * @param Node|null $not_found_node
+     * @return mixed
      */
-    function unserializeEntity($value, Node $not_found_node = null) {
-        if(is_string($value) && preg_match('#@entity:(.*)#', $value, $matches)) {
+    function unserializeEntity($value, Node $not_found_node=null)
+    {
+        if (is_string($value) && preg_match("#@entity:(.*)#", $value, $matches)) {
             $network__id = $matches[1];
             $value = $this->getEntityByNetworkId($network__id, $not_found_node);
-            
-        } else if(is_array($value) || $value instanceof \stdClass) {
-            foreach($value as $key => $val) {
-                if (in_array((string)$key, ['terms', 'location'])) {
+        } else if (is_array($value)) {
+            foreach ($value as $key => $val) {
+                if (in_array((string) $key, ["terms", "location"])) {
                     $value[$key] = $val ? (array) $val : null;
                 } else {
                     $value[$key] = $this->unserializeEntity($val, $not_found_node);
                 }
             }
+        } else if ($value instanceof \stdClass) {
+            foreach ($value as $key => $val) {
+                if (in_array((string) $key, ["terms", "location"])) {
+                    $value->$key = $val ? (array) $val : null;
+                } else {
+                    $value->key = $this->unserializeEntity($val, $not_found_node);
+                }
+            }
         }
-
         return $value;
     }
 
@@ -533,7 +554,6 @@ class Plugin extends \MapasCulturais\Plugin
         unset($ids[$network_id]);
         $entity->owner->$ids_key = $ids;
         Plugin::ensureNetworkID($entity->owner);
-        $this->skip($entity->owner, [Plugin::SKIP_BEFORE]);
         $entity->owner->save(true);
         $nodes = Plugin::getEntityNodes($entity->owner);
         foreach ($nodes as $node) {
