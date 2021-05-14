@@ -464,6 +464,7 @@ class Node extends \MapasCulturais\Controller
             $owner->save(true);
             // enqueue the download
             $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
+                "node" => $this->getRequestOriginNode(),
                 "user" => $app->user->id,
                 "networkID" => $network_id,
                 "className" => $class_name,
@@ -828,15 +829,15 @@ class Node extends \MapasCulturais\Controller
 
         $agents_data = $this->postData['agents'] ?? [];
         $origin_node = $this->getRequestOriginNode();
-        
+
         $entities = array_merge($app->user->getEnabledAgents(), $app->user->getEnabledSpaces());
-        foreach($agents_data as $foreign_data) {
+        foreach ($agents_data as $foreign_data) {
             $linked = false;
-            foreach($entities as $entity) {
+            foreach ($entities as $entity) {
                 if ($this->compareEntityData($entity, $foreign_data)) {
                     $linked = true;
                     $entity->{"network__{$origin_node->slug}_entity_id"} = $foreign_data['id'];
-                    
+
                     $data = [];
 
                     $agent_updated = $entity->updateTimestamp ?? $entity->createTimestamp;
@@ -847,8 +848,14 @@ class Node extends \MapasCulturais\Controller
                         if (in_array($key, ['network__id', 'createTimestamp', 'update_timestamp', 'network__revisions'])) {
                             continue;
                         }
-
                         if ($val == $entity->$key) {
+                            continue;
+                        }
+                        if ($key == "files") {
+                            $this->bootstrapFiles($entity, $val, $foreign_data, $origin_node);
+                            continue;
+                        } else if ($key == "metalists") {
+                            $this->bootstrapMetaLists($entity, $val, $foreign_data);
                             continue;
                         }
                         if ($val && $entity->$key) {
@@ -864,7 +871,7 @@ class Node extends \MapasCulturais\Controller
                     $this->writeEntityFields($entity, $data);
 
                     $fdate = new DateTime($foreign_data['createTimestamp']['date']);
-                    if($fdate < $entity->createTimestamp){
+                    if ($fdate < $entity->createTimestamp) {
                         $new_network__id = $foreign_data['network__id'];
                         $current_network__id = $entity->network__id;
 
@@ -876,7 +883,7 @@ class Node extends \MapasCulturais\Controller
                                 return;
                             }
                             $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
-                                'entity' => $entity, 
+                                'entity' => $entity,
                                 'node' => $node,
                                 'current_network__id' => $current_network__id,
                                 'new_network__id' => $new_network__id
@@ -895,7 +902,7 @@ class Node extends \MapasCulturais\Controller
         }
     }
 
-    function POST_updateEntityNetworkId() 
+    function POST_updateEntityNetworkId()
     {
         $this->requireAuthentication();
 
@@ -944,7 +951,7 @@ class Node extends \MapasCulturais\Controller
                     return;
                 }
                 $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
-                    'entity' => $entity, 
+                    'entity' => $entity,
                     'node' => $node,
                     'current_network__id' => $current_network__id,
                     'new_network__id' => $new_network__id
@@ -952,6 +959,115 @@ class Node extends \MapasCulturais\Controller
             });
         }
     }
+
+    function bootstrapFiles(Entity $entity, array $foreign_data, array $foreign_entity, NodeEntities\Node $node)
+    {
+        $app = App::i();
+        $file_groups = array_keys($app->getRegisteredFileGroupsByEntity($entity));
+        foreach ($foreign_data as $group => $group_data) {
+            if (!in_array($group, $file_groups)) {
+                continue;
+            }
+            $revision_key = "network__revisions_files_$group";
+            $network_ids_key = "network__ids_files_$group";
+            if (isset($group_data["id"])) {
+                $revisions = $entity->$revision_key ?? [];
+                $revisions[] = end($foreign_entity[$revision_key]);
+                $entity->$revision_key = $revisions;
+                $network_id = array_keys($foreign_entity[$network_ids_key])[0];
+                $entity->$network_ids_key = [$network_id => -1];
+                $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
+                    "node" => $node,
+                    "user" => $app->user->id,
+                    "networkID" => $network_id,
+                    "className" => $entity->fileClassName,
+                    "ownerClassName" => $entity->className,
+                    "ownerNetworkID" => $entity->network__id,
+                    "ownerSourceNetworkID" => $foreign_entity["network__id"],
+                    "data" => $group_data
+                ]);
+            } else {
+                $revisions = $entity->$revision_key ?? [];
+                $revisions[] = end($foreign_entity[$revision_key]);
+                $entity->$revision_key = $revisions;
+                foreach ($group_data as $file) {
+                    if (count(array_filter(($entity->files[$group] ?? []), function ($item) use ($file) {
+                        return ($item->md5 == $file["md5"]);
+                    })) > 0) {
+                        continue;
+                    }
+                    $network_id = array_search($file["id"], $foreign_entity[$network_ids_key]);
+                    $entity->$network_ids_key = [$network_id => -1];
+                    $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
+                        "node" => $node,
+                        "user" => $app->user->id,
+                        "networkID" => $network_id,
+                        "className" => $entity->fileClassName,
+                        "ownerClassName" => $entity->className,
+                        "ownerNetworkID" => $entity->network__id,
+                        "ownerSourceNetworkID" => $foreign_entity["network__id"],
+                        "data" => $file
+                    ]);
+                }
+            }
+        }
+        $entity->save(true);
+        return;
+    }
+
+    function bootstrapMetaLists(Entity $entity, array $foreign_data, array $foreign_entity)
+    {
+        $app = App::i();
+        $list_groups = array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity($entity)), $this->plugin->allowedMetaListGroups);
+        foreach ($foreign_data as $group => $group_data) {
+            if (!in_array($group, $list_groups)) {
+                continue;
+            }
+            $revision_key = "network__revisions_metalist_$group";
+            $network_ids_key = "network__ids_metalist_$group";
+            $revisions = $entity->$revision_key ?? [];
+            $revisions[] = end($foreign_entity[$revision_key]);
+            $entity->$revision_key = $revisions;
+            foreach ($group_data as $list_item) {
+                if (count(array_filter(($entity->metalists[$group] ?? []), function ($item) use ($list_item) {
+                    return (($item->title == ($list_item["title"] ?? null)) &&
+                            ($item->value == ($list_item["value"] ?? null)) &&
+                            ($item->description == ($list_item["description"] ?? null)));
+                })) > 0) {
+                    continue;
+                }
+                $network_id = array_search($list_item["id"], $foreign_entity[$network_ids_key]);
+                $entity->$network_ids_key = [$network_id => -1];
+                $metalists = $entity->metalists;
+                $new_item = new \MapasCulturais\Entities\MetaList();
+                $new_item->owner = $entity;
+                $new_item->group = $group;
+                $new_item->title = $list_item["title"];
+                $new_item->value = $list_item["value"];
+                if (isset($list_item["description"])) {
+                    $new_item->description = $list_item["description"];
+                }
+                if (!isset($metalists[$group])) {
+                    $metalists[$group] = [];
+                }
+                $metalists[$group][] = $new_item;
+                $entity->metalists = $metalists;
+                // save the new entry's network ID (as placeholder)
+                $network_ids = (array) $entity->$network_ids_key;
+                $network_ids[$network_id] = -1;
+                $entity->$network_ids_key = $network_ids;
+                // inform networkID to plugin and stop network and revision IDs from being created again
+                $this->plugin->saveNetworkID($network_id);
+                $this->plugin->skip($entity, [Plugin::SKIP_BEFORE]);
+                // save the new entry
+                $new_item->save(true);
+            }
+            // the owner must be saved since the IDs are kept in it
+            $entity->save(true);
+        }
+        return;
+    }
+
     function compareEntityData(Entity $entity, array $foreign_data) {
         if($entity instanceof Agent) {
             return $this->compareAgentData($entity, $foreign_data);
@@ -1040,7 +1156,7 @@ class Node extends \MapasCulturais\Controller
     /**
      * Retorna o nó que está fazendo a requisição
      * @return NodeEntities\Node
-     * @throws RuntimeException 
+     * @throws RuntimeException
      */
     function getRequestOriginNode()
     {
@@ -1048,11 +1164,10 @@ class Node extends \MapasCulturais\Controller
 
         $node_slug = $this->postData['nodeSlug'] ?? null;
 
-        
         $nodes = $app->repo(EntitiesNode::class)->findBy(['user' => $app->user]);
-                
+
         foreach ($nodes as $node) {
-            if($node->slug == $node_slug) {
+            if ($node->slug == $node_slug) {
                 return $node;
             }
         }

@@ -26,6 +26,13 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
             "user" => "EQ({$job->user})"
         ]);
         $ids = $query->findIds();
+        if (!$ids && isset($job->ownerSourceNetworkID)) {
+            $query = new \MapasCulturais\ApiQuery($job->ownerClassName, [
+                "network__id" => "EQ({$job->ownerSourceNetworkID})",
+                "user" => "EQ({$job->user})"
+            ]);
+            $ids = $query->findIds();
+        }
         if (!$ids) {
             $app->log->info("Download task for {$data["url"]} cannot find " .
                             "owner of class {$job->ownerClassName} with " .
@@ -35,6 +42,12 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         }
         $id = $ids[0];
         $owner = $app->repo($job->ownerClassName)->find($id);
+        if ($app->config["network.fixNodeURLs"] ?? false) {
+            $app->log->info("network.fixNodeURLs is enabled");
+            $orig_host = parse_url($data["url"], PHP_URL_HOST);
+            $host = parse_url($job->node->url);
+            $data["url"] = implode($host, explode($orig_host, $data["url"], 2));
+        }
         $app->log->info("DOWNLOAD: {$data["url"]}");
         $ch = curl_init($data["url"]);
         $tmp = tempnam("/tmp", "");

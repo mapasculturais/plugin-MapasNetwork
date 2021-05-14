@@ -104,6 +104,7 @@ class Plugin extends \MapasCulturais\Plugin
         /** @var Plugin $plugin */
         $plugin = $this;
 
+        // because this depends on getRegistered*GroupsByEntity, it must be guaranteed to run only after other plugins had a go at register
         $app->hook("app.register:after", function() use ($plugin) {
             /** @var \MapasCulturais\App $this */
             $register_types = [
