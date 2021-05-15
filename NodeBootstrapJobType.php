@@ -25,8 +25,26 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         $node = $job->node;
         $user = $node->user;
 
+        $allowed_metalist_groups = $this->plugin->allowedMetaListGroups;
+        $file_groups = [
+            ((string) Agent::class) => array_keys($app->getRegisteredFileGroupsByEntity(Agent::class)),
+            ((string) Space::class) => array_keys($app->getRegisteredFileGroupsByEntity(Space::class))
+        ];
+        $metalist_groups = [
+            ((string) Agent::class) => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Agent::class)), $allowed_metalist_groups),
+            ((string) Space::class) => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)), $allowed_metalist_groups)
+        ];
         $map_ids = function ($entity) { return $entity->id; };
-        $map_serialize = function ($entity) { return $this->plugin->serializeEntity($entity); };
+        $map_serialize = function ($entity) use ($file_groups, $metalist_groups) {
+            $serialised = $this->plugin->serializeEntity($entity);
+            $serialised["files"] = array_filter($this->plugin->serializeEntity($entity->files), function ($key) use ($entity, $file_groups) {
+                return in_array(((string) $key), $file_groups[$entity->className]);
+            }, ARRAY_FILTER_USE_KEY);
+            $serialised["metalists"] = array_filter($this->plugin->serializeEntity($entity->metalists), function ($key) use ($entity, $metalist_groups) {
+                return in_array(((string) $key), $metalist_groups[$entity->className]);
+            }, ARRAY_FILTER_USE_KEY);
+            return $serialised;
+        };
 
         $agents_args = $node->getFilters(Agent::class);
         $agent_ids = array_map($map_ids, $user->getEnabledAgents());
