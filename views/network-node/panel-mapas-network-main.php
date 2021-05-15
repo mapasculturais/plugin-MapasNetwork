@@ -8,18 +8,30 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
 
 ?>
 <div class="panel-list panel-main-content">
-<?php $this->applyTemplateHook("panel-header", "before"); ?>
+
+
+    <?php $this->applyTemplateHook("panel-header", "before"); ?>
     <header class="panel-header clearfix">
         <?php $this->applyTemplateHook("panel-header", "begin"); ?>
         <h2><?php i::_e("Meus Mapas Culturais"); ?></h2>
-        <div class="btn btn-default add">
-            <a class="js-open-dialog" href="javascript:void(0)" data-dialog-block="true" data-dialog="#add-network-node" data-dialog-callback="MapasCulturais.addEntity" data-form-action="insert" data-dialog-title="<?php i::_e("Vincule uma conta de Mapa Cultural"); ?>">
-                <?php i::_e("Vincular novo Mapa"); ?>
-            </a>
-        </div>
         <?php $this->applyTemplateHook("panel-header", "end") ?>
     </header>
     <?php $this->applyTemplateHook("panel-header", "after"); ?>
+    
+    <?php if ($found_accounts): ?>
+        <div class="alert info">
+            <?php i::_e('Detectamos que você possui conta nos mapas culturais listados abaixo. Recomendamos que você vincule suas contas para que suas informações fiquem sincronizadas.'); ?>
+        </div>
+        <?php foreach ($found_accounts as $url): ?>
+            <article class="objeto clearfix">
+                <h1><?= $url; ?></h1>
+                <form method="POST" action="<?= $this->controller->createUrl('create') ?>">
+                    <input type="hidden" name="url" value="<?= $url ?>" />
+                    <button class="btn btn-small btn-primary"><?php i::_e("vincular conta");?></button>
+                </form>
+            </article>
+        <?php endforeach; ?>
+    <?php endif; ?>
 
     <div id="main">
         <?php foreach ($nodes as $node): ?>
@@ -29,6 +41,15 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
             <div class="alert info"><?php i::_e("Você não possui nenhum Mapa vinculado.");?></div>
         <?php endif; ?>
     </div>
+
+    <div class="alert info">
+        <?php i::_e('Se você possui conta em outro mapa cultural que não esteja listado acima, você pode vincular as contas utilizando o botão abaixo.'); ?>
+    </div>
+    <div class="btn btn-default add">
+            <a class="js-open-dialog" href="javascript:void(0)" data-dialog-block="true" data-dialog="#add-network-node" data-dialog-callback="MapasCulturais.addEntity" data-form-action="insert" data-dialog-title="<?php i::_e("Vincule uma conta de Mapa Cultural"); ?>">
+                <?php i::_e("Vincular conta em outro mapa cultural"); ?>
+            </a>
+        </div>
 
     <div id="add-network-node" class="entity-modal has-step js-dialog " style="display: none">
         <a href="#" class="js-close icon icon-close" rel="noopener noreferrer"></a>

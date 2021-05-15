@@ -3,6 +3,7 @@
 namespace MapasNetwork;
 
 use Closure;
+use DateTime;
 use Doctrine\ORM\OptimisticLockException;
 use Doctrine\ORM\ORMInvalidArgumentException;
 use Doctrine\ORM\TransactionRequiredException;
@@ -22,6 +23,7 @@ use MapasSDK\Exceptions\Unauthorized;
 use MapasSDK\Exceptions\Forbidden;
 use MapasSDK\Exceptions\NotFound;
 use MapasSDK\Exceptions\UnexpectedError;
+use MapasSDK\MapasSDK;
 
 /**
  * @property-read string $nodeSlug
@@ -54,7 +56,10 @@ class Plugin extends \MapasCulturais\Plugin
             'filters' => $filters += [
                 'agent' => [],
                 'space' => []
-            ]
+            ],
+            'nodes' => [],
+            // usar os formatos relativos (https://www.php.net/manual/pt_BR/datetime.formats.relative.php)
+            'nodes-verification-interval' => '1 week'
         ];
 
         parent::__construct($config);
@@ -340,6 +345,31 @@ class Plugin extends \MapasCulturais\Plugin
             $plugin->requestDeletion($this, "deletedFile", $this->group, "files");
             return;
         });
+
+        /**
+         * Redireciona o usuário para a página de vinculação de contas
+         * se forem encontradas contas em outros nós que ainda não foram vinculadas.
+         * O redirecionamento acontece no primeiro login após a instalação do plugin ou num 
+         * intervalo configurado no plugin.
+         */
+        $app->hook('auth.login', function() use($app, $plugin) {
+            // se está no processo de vinculação, não redireciona
+            if (($_SESSION['mapas-network:timestamp'] ?? null) > new DateTime()) {
+                return;
+            }
+
+            $date = $app->user->network__next_verification_datetime;
+            if ($date < new DateTime()) {
+                $repo = $app->repo(Entities\Node::class);
+                $nodes = $repo->findBy(["user" => $app->user]);
+                
+                if ($plugin->findAccounts($nodes)) {
+                    $app->redirect($app->createUrl('network-node', 'panel'));
+                    exit;
+                }
+            }
+        });
+
         return;
     }
 
@@ -378,6 +408,8 @@ class Plugin extends \MapasCulturais\Plugin
 
         $app->registerController("network-node", "\\MapasNetwork\\Controllers\\Node");
 
+
+        // Registra metadados
         $revisions_metadata = [
             'label' => i::__('Lista das revisões da rede', 'mapas-network'),
             'type' => 'json',
@@ -395,6 +427,11 @@ class Plugin extends \MapasCulturais\Plugin
 
         $this->registerAgentMetadata('network__id', $network_id_metadata);
         $this->registerSpaceMetadata('network__id', $network_id_metadata);
+
+        $this->registerUserMetadata('network__next_verification_datetime', [
+            'label' => i::__('Data da próxima verificação por contas nos nodes'),
+            'type' => 'DateTime'
+        ]);
 
         // background jobs
         $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
@@ -696,5 +733,53 @@ class Plugin extends \MapasCulturais\Plugin
 
         $entity->save(true);
         return $entity;
+    }
+
+
+    function findAccounts(array $exclude_nodes = null) 
+    {
+        $app = App::i();
+
+        $find_data = [
+            'emails' => [$app->user->email],
+            'documents' => []
+        ];
+
+        foreach ($app->user->enabledAgents as $agent) {
+            if($agent->emailPrivado && !in_array($agent->emailPrivado, $find_data['emails'])) {
+                $find_data['emails'][] = $agent->emailPrivado;
+            }
+
+            if($agent->emailPublico && !in_array($agent->emailPublico, $find_data['emails'])) {
+                $find_data['emails'][] = $agent->emailPublico;
+            }
+
+            if ($agent->documento) {
+                $find_data['documents'][] = $agent->documento;
+            }
+        }
+
+        $responses = [];
+        foreach ($this->config['nodes'] as $node_url) {
+            $linked = false;
+            foreach($exclude_nodes as $node) {
+                $app->log->debug("$node->url === $node_url");
+                if ($node->url == $node_url) {
+                    $linked = true;
+                    break;
+                }
+            }
+            if ($linked) {
+                continue;
+            }
+            $sdk = new MapasSDK($node_url);
+
+            $curl = $sdk->apiPost('network-node/verifyAccount', $find_data);
+
+            if ($curl->response) {
+                $responses[] = $node_url;
+            }
+        }
+        return $responses;
     }
 }

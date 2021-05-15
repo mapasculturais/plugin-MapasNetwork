@@ -76,9 +76,22 @@ class Node extends \MapasCulturais\Controller
     {
         $this->requireAuthentication();
         $app = App::i();
+
+        $interval = $this->plugin->config['nodes-verification-interval'];
+        if($interval[0] != '+') {
+            $interval = '+' . $interval;
+        }
+        $app->user->network__next_verification_datetime = $interval;
+        $app->user->save(true);
+
         $nodeRepo = $app->repo(NodeEntities\Node::class);
+        $nodes = $nodeRepo->findBy(["user" => $app->user]);
+
+        $found_accounts = $this->plugin->findAccounts($nodes);
+
         $this->render("panel-mapas-network-main", [
-            "nodes" => $nodeRepo->findBy(["user" => $app->user]),
+            "nodes" => $nodes,
+            'found_accounts' => $found_accounts
         ]);
         return;
     }
@@ -203,11 +216,13 @@ class Node extends \MapasCulturais\Controller
     {
         $app = App::i();
 
+        $timestamp = $_SESSION['mapas-network:timestamp'] ?? new DateTime('+300 seconds');
         $connect_to = $this->data['to'] ?? $_SESSION['mapas-network:to'] ?? null;
         $create_token = $this->data['token'] ?? $_SESSION['mapas-network:token'] ?? null;
         $name = base64_decode($this->data['name'] ?? null) ?? $_SESSION['mapas-network:name'] ?: $connect_to;
         $isConfirmed = $_SESSION['mapas-network:confirmed'] ?? null;
 
+        $_SESSION['mapas-network:timestamp'] = $timestamp;
         $_SESSION['mapas-network:to'] = $connect_to;
         $_SESSION['mapas-network:token'] = $create_token;
         $_SESSION['mapas-network:name'] = $name;
@@ -222,9 +237,11 @@ class Node extends \MapasCulturais\Controller
         }
 
         unset(
+            $_SESSION['mapas-network:timestamp'],
             $_SESSION['mapas-network:to'],
             $_SESSION['mapas-network:token'],
-            $_SESSION['mapas-network:name']
+            $_SESSION['mapas-network:name'],
+            $_SESSION['mapas-network:confirmed']
         );
 
         if ($connect_to && $create_token) {
@@ -688,7 +705,6 @@ class Node extends \MapasCulturais\Controller
             $entity->network__revisions = $entity->network__revisions ?? [];
 
             if (in_array($revision_id, $entity->network__revisions)){
-                $app->log->debug("$network_id $revision_id already exists");
                 $this->json("$network_id $revision_id already exists");
                 return;
             }
@@ -924,7 +940,10 @@ class Node extends \MapasCulturais\Controller
             "user" => "EQ({$app->user->id})"
         ]);
 
+
+
         if ($ids = $query->findIds()) {
+            
             $id = $ids[0];
 
             $entity = $app->repo($class_name)->find($id);
@@ -952,6 +971,64 @@ class Node extends \MapasCulturais\Controller
             });
         }
     }
+
+    function POST_verifyAccount() {
+        $app = App::i();
+        $conn = $app->em->getConnection();
+
+        $emails_in = [];
+        $params = [];
+        foreach($this->postData['emails'] ?? [] as $i => $mail) {
+            $key = "mail_{$i}";
+            $emails_in[] = ':'.$key;
+            $params[$key] = $mail;
+        }
+        $emails_in = implode(', ', $emails_in);
+
+        $docs_in = [];
+        foreach($this->postData['documents'] ?? [] as $i => $doc) {
+            $key = "doc_{$i}";
+            $docs_in[] = ':'.$key;
+            $params[$key] = preg_replace('#[^\d]#','',$doc);
+        }
+        $docs_in = implode(',', $docs_in);
+
+        if ($emails_in && $docs_in) {
+            $sql = "SELECT count(distinct(a.user_id)) 
+                    FROM agent a 
+                        JOIN usr u ON u.id = a.user_id
+                        LEFT JOIN agent_meta email_pub ON email_pub.object_id = a.id AND email_pub.key = 'emailPublico'
+                        LEFT JOIN agent_meta email_priv ON email_priv.object_id = a.id AND email_priv.key = 'emailPrivado'
+                        LEFT JOIN agent_meta doc ON doc.object_id = a.id AND doc.key = 'documento'
+                    WHERE 
+                        u.email IN({$emails_in}) OR
+                        email_pub.value IN({$emails_in}) OR
+                        email_priv.value IN({$emails_in}) OR
+                        REGEXP_REPLACE(doc.value,'[^0-9]','','g') IN({$docs_in})";
+        } else if ($emails_in) {
+            $sql = "SELECT count(distinct(a.user_id)) 
+                    FROM agent a 
+                        JOIN usr u ON u.id = a.user_id
+                        LEFT JOIN agent_meta email_pub ON email_pub.object_id = a.id AND email_pub.key = 'emailPublico'
+                        LEFT JOIN agent_meta email_priv ON email_priv.object_id = a.id AND email_priv.key = 'emailPrivado'
+                    WHERE 
+                        u.email IN({$emails_in}) OR
+                        email_pub.value IN({$emails_in}) OR
+                        email_priv.value IN({$emails_in})";  
+
+        } else if ($docs_in) {
+            $sql = "SELECT count(distinct(a.user_id)) 
+                    FROM agent a 
+                        LEFT JOIN agent_meta doc ON doc.object_id = a.id AND doc.key = 'documento'
+                    WHERE 
+                        REGEXP_REPLACE(doc.value,'[^0-9]','','g') IN({$docs_in})";
+        }
+
+        $result = $conn->fetchColumn($sql, $params);
+        $this->json($result);
+    }
+
+
     function compareEntityData(Entity $entity, array $foreign_data) {
         if($entity instanceof Agent) {
             return $this->compareAgentData($entity, $foreign_data);
