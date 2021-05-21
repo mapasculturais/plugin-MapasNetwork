@@ -423,7 +423,6 @@ class Plugin extends \MapasCulturais\Plugin
         $network_id_metadata = [
             'label' => i::__('Id da entidade na rede de mapas', 'mapas-network'),
             'type' => 'string',
-            'private' => true
         ];
 
         $this->registerAgentMetadata('network__id', $network_id_metadata);
