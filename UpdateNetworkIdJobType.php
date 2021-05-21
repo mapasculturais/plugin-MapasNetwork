@@ -19,18 +19,21 @@ class UpdateNetworkIdJobType extends \MapasCulturais\Definitions\JobType
 
     protected function _execute(Job $job)
     {
-        $node = $job->node;
+        $skip_node = $job->node;
         $entity = $job->entity;
-        
-        $data = [
-            'className' => $entity->className,
-            'current_network__id' => $job->current_network__id,
-            'nodeSlug' => $this->plugin->nodeSlug,
-            'new_network__id' => $job->new_network__id
-        ];
-
-        $node->api->apiPost('network-node/updateEntityNetworkId', $data);
-        
+        $this->plugin->foreachEntityNodeDo($entity, function ($node, $entity) use ($job, $skip_node) {
+            if ($node->equals($skip_node)) {
+                return;
+            }
+            $data = [
+                "className" => $entity->className,
+                "current_network__id" => $job->current_network__id,
+                "nodeSlug" => $this->plugin->nodeSlug,
+                "new_network__id" => $job->new_network__id
+            ];
+            $node->api->apiPost("network-node/updateEntityNetworkId", $data);
+            return;
+        });
         return true;
     }
 

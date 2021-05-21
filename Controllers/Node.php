@@ -894,17 +894,12 @@ class Node extends \MapasCulturais\Controller
                         $entity->network__id = $new_network__id;
 
                         $skip_node = $this->getRequestOriginNode();
-                        $this->plugin->foreachEntityNodeDo($entity, function($node, $entity) use($app, $skip_node, $current_network__id, $new_network__id) {
-                            if ($node->equals($skip_node)) {
-                                return;
-                            }
-                            $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
-                                'entity' => $entity,
-                                'node' => $node,
-                                'current_network__id' => $current_network__id,
-                                'new_network__id' => $new_network__id
-                            ]);
-                        });
+                        $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
+                            "entity" => $entity,
+                            "node" => $skip_node,
+                            "current_network__id" => $current_network__id,
+                            "new_network__id" => $new_network__id
+                        ]);
                     }
 
                     $entity->save(true);
@@ -947,39 +942,25 @@ class Node extends \MapasCulturais\Controller
             "user" => "EQ({$app->user->id})"
         ]);
 
-
-
         if ($ids = $query->findIds()) {
-            
             $id = $ids[0];
-
             $entity = $app->repo($class_name)->find($id);
-
             $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
-
             $entity->network__id = $new_network__id;
-
             $entity->save(true);
-
             $app->log->debug("UPDATED: {$entity} => {$entity->network__id}");
-
             $skip_node = $this->getRequestOriginNode();
-
-            $this->plugin->foreachEntityNodeDo($entity, function($node, $entity) use($app, $skip_node, $current_network__id, $new_network__id) {
-                if($node->equals($skip_node)){
-                    return;
-                }
-                $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
-                    'entity' => $entity,
-                    'node' => $node,
-                    'current_network__id' => $current_network__id,
-                    'new_network__id' => $new_network__id
-                ]);
-            });
+            $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
+                "entity" => $entity,
+                "node" => $skip_node,
+                "current_network__id" => $current_network__id,
+                "new_network__id" => $new_network__id
+            ]);
         }
     }
 
-    function POST_verifyAccount() {
+    function POST_verifyAccount()
+    {
         $app = App::i();
         $conn = $app->em->getConnection();
 
