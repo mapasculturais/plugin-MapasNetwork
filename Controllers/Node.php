@@ -267,7 +267,7 @@ class Node extends \MapasCulturais\Controller
         }
     }
 
-    function GET_return ()
+    function GET_return()
     {
         $app = App::i();
 
@@ -294,11 +294,9 @@ class Node extends \MapasCulturais\Controller
         );
 
         if ($connect_token && $this->checkTokenSecret($create_token, $create_secret, true)) {
-
             $connect_secret = file_get_contents("{$connect_from}{$this->id}/verifyConnectionToken?token={$connect_token}");
             if ($connect_secret) {
                 $keys = json_decode(file_get_contents("{$connect_from}{$this->id}/getKeys?token={$connect_token}&s=$connect_secret"));
-
                 $node = new NodeEntities\Node;
                 $node->url = $connect_from;
                 $node->status = 1;
@@ -309,9 +307,9 @@ class Node extends \MapasCulturais\Controller
                 $user_app->save(true);
                 $node->userApp = $user_app;
                 $node->save(true);
-
                 $node->setKeyPair($keys[0], $keys[1]);
-
+                // create a proxy user for entities that may need to be imported for Event sync
+                $this->createProxyUser($node, $name);
                 $node->api->apiPost("{$this->id}/finish", [
                     "token" => $connect_token,
                     "publicKey" => $user_app->getPublicKey(),
@@ -319,7 +317,6 @@ class Node extends \MapasCulturais\Controller
                     "connect_to" => $app->baseUrl,
                     "name" => $app->siteName
                 ]);
-
                 $app->redirect($this->createUrl('panel'));
             }
         }
@@ -348,7 +345,6 @@ class Node extends \MapasCulturais\Controller
         $public_key = $this->postData["publicKey"];
         $private_key = $this->postData["privateKey"];
         $connect_token = $this->postData["token"];
-
         $node = new NodeEntities\Node;
         $node->url = $connect_from;
         $node->status = 1;
@@ -356,8 +352,10 @@ class Node extends \MapasCulturais\Controller
         $user_app_id = $app->cache->fetch("$connect_token:userAppId");
         $node->userApp = $app->repo("UserApp")->find($user_app_id);
         $node->save(true);
-
         $node->setKeyPair($public_key, $private_key);
+        // create a proxy user for entities that may need to be imported for Event sync
+        $this->createProxyUser($node, $site_name);
+        return;
     }
 
     function GET_cancelAccountLink()
@@ -1122,6 +1120,37 @@ class Node extends \MapasCulturais\Controller
             // the owner must be saved since the IDs are kept in it
             $entity->save(true);
         }
+        return;
+    }
+
+    function createProxyUser(EntitiesNode $node, string $name)
+    {
+        $query = new ApiQuery("MapasCulturais\\Entities\\User", [
+            "network__proxy_slug" => "EQ({$node->slug})"
+        ]);
+        if (!empty($query->findIds())) {
+            return;
+        }
+        $app = App::i();
+        $app->disableAccessControl();
+        $new_user = new \MapasCulturais\Entities\User;
+        $new_user->authProvider = __CLASS__;
+        $auth_uid = uniqid();
+        $auth_uid = "{$node->slug}.{$auth_uid}@MapasNetwork";
+        $new_user->authUid = $auth_uid;
+        $new_user->email = $auth_uid;
+        $new_user->network__proxy_slug = $node->slug;
+        $app->em->persist($new_user);
+        $app->em->flush();
+        $agent = new Agent($new_user);
+        $agent->name = $name;
+        $agent->type = 2;
+        $agent->status = Agent::STATUS_ENABLED;
+        $agent->save();
+        $app->em->flush();
+        $new_user->profile = $agent;
+        $new_user->save(true);
+        $app->enableAccessControl();
         return;
     }
 

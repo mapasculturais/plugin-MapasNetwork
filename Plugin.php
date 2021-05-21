@@ -428,6 +428,10 @@ class Plugin extends \MapasCulturais\Plugin
         $this->registerAgentMetadata('network__id', $network_id_metadata);
         $this->registerSpaceMetadata('network__id', $network_id_metadata);
 
+        $this->registerUserMetadata("network__proxy_slug", [
+            "label" => i::__("Se este usuário é proxy de alguma instalação, o slug da mesma."),
+            "type" => "string"
+        ]);
         $this->registerUserMetadata('network__next_verification_datetime', [
             'label' => i::__('Data da próxima verificação por contas nos nodes'),
             'type' => 'DateTime'
