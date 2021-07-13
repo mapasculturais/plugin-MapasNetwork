@@ -1,64 +1,31 @@
+console.log("JS is being loaded.");
 (function (angular) {
     "use strict";
+    var module = angular.module('ng.mapas-network', []);
 
-    var app = angular.module("mapas-network.app", [
-        "mc.directive.editBox",
-        "mc.module.notifications",
-        "ngSanitize"
-    ]);
+    module.config(['$httpProvider', function ($httpProvider) {
+        $httpProvider.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded;charset=utf-8';
+        $httpProvider.defaults.headers.common["X-Requested-With"] = 'XMLHttpRequest';
+        $httpProvider.defaults.transformRequest = function (data) {
+            var result = angular.isObject(data) && String(data) !== '[object File]' ? $.param(data) : data;
 
-    app.config(["$httpProvider", function ($httpProvider) {
-            $httpProvider.defaults.headers.post["Content-Type"] = "application/x-www-form-urlencoded;charset=utf-8";
-            $httpProvider.defaults.transformRequest = function (data) {
-                var result = angular.isObject(data) && String(data) !== "[object File]" ? $.param(data) : data;
-                return result;
-            };
-        }]);
+            return result;
+        };
+    }]);
 
-    app.factory("MapasNetworkService", ["$http", "$rootScope", function ($http, $rootScope) {
-            return {
-                serviceProperty: null,
-                getUrl: function () {
-                    return MapasCulturais.baseURL // + controllerId  + '/' + actionName
-                },
-                doSomething: function (param) {
-                    var data = {
-                        prop: name
-                    };
-                    return $http.post(this.getUrl(), data).
-                            success(function (data, status) {
-                                $rootScope.$emit("something", {message: "Something was done", data: data, status: status});
-                            }).
-                            error(function (data, status) {
-                                $rootScope.$emit("error", {message: "Cannot do something", data: data, status: status});
-                            });
-                }
-            };
-        }]);
+    module.controller('MapasNetworkController',['$scope', 'MapasNetworkService','$window', function($scope, MapasNetworkService, $window) {
+        console.log("Controller constructed?");
+        $scope.data = {whatever: "blah", entityShouldSync: true};
+        $scope.toggleSync = function () {
+            console.log("Toggle sync");
+            $scope.data.entityShouldSync = !$scope.data.entityShouldSync;
+        };
+    }]);
 
-    app.controller("MapasNetworkController", ["$scope", "$rootScope", "$timeout", "MapasNetworkService", "EditBox", function ($scope, $rootScope, $timeout, MapasNetworkService, EditBox) {
-            var adjustingBoxPosition = false;
-            $scope.editbox = EditBox;
-            $scope.data = {
-                test: "Mapas Network",
-                spinner: false,
-                apiQuery: {
-                }
-            };
-            var adjustBoxPosition = function () {
-                if (adjustingBoxPosition) {
-                    return;
-                }
-                setTimeout(function () {
-                    adjustingBoxPosition = true;
-                    $("#module-name-owner-button").click();
-                    adjustingBoxPosition = false;
-                });
-            };
-            $rootScope.$on("repeatDone:findEntity:find-entity-module-name-owner", adjustBoxPosition);
-            $scope.$watch("data.spinner", function (ov, nv) {
-                if (ov && !nv)
-                    adjustBoxPosition();
-            });
-        }]);
+    module.factory('MapasNetworkService', ['$http', '$rootScope', 'UrlService', function ($http, $rootScope, UrlService) {
+        return {
+
+        };
+    }]);
+
 })(angular);

@@ -12,6 +12,7 @@ use MapasCulturais\Utils;
 use MapasCulturais\Traits;
 
 use MapasCulturais\Entities\Agent;
+use MapasCulturais\Entities\EventOccurrence;
 use MapasCulturais\Entities\Space;
 use MapasCulturais\Exceptions\PermissionDenied;
 use MapasNetwork\Plugin;
@@ -121,9 +122,10 @@ class Node extends \MapasCulturais\Controller
             $entity->api->apiDelete("{$this->id}/single", []);
         }
         $single_url = $entity->singleUrl;
-        $app->disableAccessControl();
-        $entity->userApp->destroy(true);
-        $app->enableAccessControl();
+        Plugin::sudo(function () use ($entity) {
+            $entity->userApp->destroy(true);
+            return;
+        });
         if ($app->request->isAjax()) {
             $this->json(true);
         } else {
@@ -427,6 +429,88 @@ class Node extends \MapasCulturais\Controller
         $this->plugin->createEntity($class_name, $network_id, $data);
     }
 
+    function POST_createdEventOccurrence()
+    {
+        $this->requireAuthentication();
+        $app = App::i();
+        $node_slug = $this->postData["nodeSlug"];
+        $class_name = $this->postData["className"];
+        $data = $this->postData["data"];
+        $network_id = $data["network__id"];
+        $app->log->debug("createdEventOccurrence: $network_id");
+        if (isset($data[$this->plugin->entityMetadataKey])) {
+            $this->json("ok");
+            return;
+        }
+        if ($class_name !== EventOccurrence::class) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user, "create");
+        }
+        // verifica se o evento já existe neste nó, e se a ocorrência já existe
+        $event = $this->plugin->unserializeEntity($data["event"]);
+        if ($event && isset($event->network__occurrence_ids->$network_id)) {
+            $id = $event->network__occurrence_ids->$network_id;
+            /**
+             * aproveita a requisição para atualizar o id da entidade no outro nó,
+             * desta forma a propagação dos
+             */
+            $entity = $app->repo($class_name)->find($id);
+            $entity->{"network__{$node_slug}_entity_id"} = $data["id"];
+            Plugin::sudo(function () use ($entity) {
+                $entity->save(true); // this is an existing, authorised occurrence, but without "sudo" it'll generate a request to save
+                return;
+            });
+            $app->log->debug("$network_id already exists with id {$id}");
+            $this->json("$network_id already exists with id {$id}");
+            return;
+        }
+        // unlike event, space comes as embedded data, so we still need to look for the entity
+        $space = $this->plugin->unserializeEntity($data["space"]);
+        $node = $this->getRequestOriginNode();
+        $space_entity = $this->plugin->getEntityByNetworkId($space["network__id"]);
+        if (!$space_entity) {
+            if (!$space["owner"]) {
+                $id = Plugin::getProxyUserIDForNode($node->slug);
+                if (!$id) {
+                    throw new \Exception("The proxy user for {$node->slug} does not exist.");
+                }
+                $proxy_user = $app->repo("User")->find($id);
+                $space["owner"] = $proxy_user->profile;
+                $space["network__proxied_owner"] = $data["space"]["owner"];
+            }
+            $plugin = $this->plugin;
+            // the space's owner isn't necessarily the event's owner so this must be sudone
+            Plugin::sudo(function () use ($plugin, $space) {
+                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space);
+                $space_entity->save(true);
+                return;
+            });
+        }
+        $data["space"] = "@entity:{$space["network__id"]}";
+        if ($event && $space) {
+            $data = $this->plugin->unserializeEntity($data);
+            $plugin = $this->plugin;
+            Plugin::sudo(function () use ($class_name, $data, $event, $network_id, $plugin) {
+                $ids_map = ((array) $event->network__occurrence_ids) ?? [];
+                $ids_map[$network_id] = Plugin::UNKNOWN_ID;
+                $event->network__occurrence_ids = $ids_map;
+                $plugin->createEntity($class_name, $network_id, $data);
+                return;
+            });
+        } else { // if we need to grab the event, best to do so after we've replied to the POST
+            if (preg_match("#@entity:(.*)#", $data["event"], $event_id)) {
+                $app->enqueueJob(Plugin::JOB_SLUG_EVENT, [
+                    "event" => $event_id[0],
+                    "node" => $node,
+                    "nodeSlug" => $node->slug,
+                    "data" => $data
+                ]);
+            }
+        }
+        $this->json("OK");
+        return;
+    }
+
     function POST_createdFile()
     {
         $this->requireAuthentication();
@@ -471,7 +555,7 @@ class Node extends \MapasCulturais\Controller
             $owner->$revision_key = $revisions;
             // save the new entry's network ID (as placeholder)
             $network_ids = (array) $owner->$network_ids_key;
-            $network_ids[$network_id] = -1;
+            $network_ids[$network_id] = Plugin::UNKNOWN_ID;
             $owner->$network_ids_key = $network_ids;
             // stop network and revision IDs from being created again
             $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
@@ -550,14 +634,47 @@ class Node extends \MapasCulturais\Controller
             $owner->metalists = $metalists;
             // save the new entry's network ID (as placeholder)
             $network_ids = (array) $owner->$network_ids_key;
-            $network_ids[$network_id] = -1;
+            $network_ids[$network_id] = Plugin::UNKNOWN_ID;
             $owner->$network_ids_key = $network_ids;
-            // inform networkID to plugin and stop network and revision IDs from being created again
-            $this->plugin->saveNetworkID($network_id);
+            // stop network and revision IDs from being created again
             $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
             // both owner and new entry must be saved since the IDs are kept in the owner
             $owner->save(true);
             $new_item->save(true);
+        }
+        return;
+    }
+
+    function POST_deletedEventOccurrence()
+    {
+        $this->requireAuthentication();
+        $app = App::i();
+        $event_class = $this->postData["ownerClassName"];
+        $event_network_id = $this->postData["ownerNetworkID"];
+        $network_id = $this->postData["network__id"];
+        $revisions = $this->postData["revisions"] ?? [];
+        $revision_id = isset($revisions) ? end($revisions) : null;
+        // obtain the owner entity
+        $query = new ApiQuery($event_class, [
+            "network__id" => "EQ({$event_network_id})",
+            "user" => "EQ({$app->user->id})"
+        ]);
+        if ($ids = $query->findIds()) {
+            $id = $ids[0];
+            $event = $app->repo($event_class)->find($id);
+            $event->network__occurrence_ids = $event->network__occurrence_ids ?? [];
+            // delete the item
+            $id = $event->network__occurrence_ids->$network_id ?? null;
+            if (!$id) {
+                $this->errorJson("The item $network_id does not exist.", 404);
+                return;
+            }
+            $item = $app->repo("EventOccurrence")->find($id);
+            // stop revision ID from being created again
+            $this->plugin->skip($event, [Plugin::SKIP_BEFORE]);
+            // the owner must be saved since the IDs are kept there
+            $event->save(true);
+            $item->delete(true);
         }
         return;
     }
@@ -608,8 +725,7 @@ class Node extends \MapasCulturais\Controller
                 return;
             }
             $item = $app->repo("File")->find($id);
-            // inform network ID to plugin and stop revision ID from being created again
-            $this->plugin->saveNetworkID($network_id);
+            // stop revision ID from being created again
             $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
             // the owner must be saved since the IDs are kept there
             $owner->save(true);
@@ -664,8 +780,7 @@ class Node extends \MapasCulturais\Controller
                 return;
             }
             $item = $app->repo("MetaList")->find($id);
-            // inform network ID to plugin and stop revision ID from being created again
-            $this->plugin->saveNetworkID($network_id);
+            // stop revision ID from being created again
             $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
             // the owner must be saved since the IDs are kept there
             $owner->save(true);
@@ -720,6 +835,14 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
+    function POST_upatedEventOccurrence()
+    {
+        $this->requireAuthentication();
+        $app = App::i();
+        // TODO
+        return;
+    }
+
     function POST_updatedMetaList()
     {
         $this->requireAuthentication();
@@ -770,8 +893,7 @@ class Node extends \MapasCulturais\Controller
             $item->title = $data["title"];
             $item->value = $data["value"];
             $item->description = $data["description"] ?? null;
-            // inform network ID to plugin and stop revision ID from being created again
-            $this->plugin->saveNetworkID($network_id);
+            // stop revision ID from being created again
             $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
             // both owner and entry must be saved since the IDs are kept in the owner
             $owner->save(true);
@@ -812,16 +934,16 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
-    function GET_entity() {
+    function GET_entity()
+    {
         $this->requireAuthentication();
-        
         $network__id = $this->data['network__id'];
 
         if (!$network__id) {
             $this->errorJson("network__id is required", 400);
             return;
         }
-        
+
         $entity = $this->plugin->getEntityByNetworkId($network__id);
 
         if (!$entity) {
@@ -980,40 +1102,39 @@ class Node extends \MapasCulturais\Controller
         $docs_in = implode(',', $docs_in);
 
         if ($emails_in && $docs_in) {
-            $sql = "SELECT count(distinct(a.user_id)) 
-                    FROM agent a 
+            $sql = "SELECT count(distinct(a.user_id))
+                    FROM agent a
                         JOIN usr u ON u.id = a.user_id
                         LEFT JOIN agent_meta email_pub ON email_pub.object_id = a.id AND email_pub.key = 'emailPublico'
                         LEFT JOIN agent_meta email_priv ON email_priv.object_id = a.id AND email_priv.key = 'emailPrivado'
                         LEFT JOIN agent_meta doc ON doc.object_id = a.id AND doc.key = 'documento'
-                    WHERE 
+                    WHERE
                         u.email IN({$emails_in}) OR
                         email_pub.value IN({$emails_in}) OR
                         email_priv.value IN({$emails_in}) OR
                         REGEXP_REPLACE(doc.value,'[^0-9]','','g') IN({$docs_in})";
         } else if ($emails_in) {
-            $sql = "SELECT count(distinct(a.user_id)) 
-                    FROM agent a 
+            $sql = "SELECT count(distinct(a.user_id))
+                    FROM agent a
                         JOIN usr u ON u.id = a.user_id
                         LEFT JOIN agent_meta email_pub ON email_pub.object_id = a.id AND email_pub.key = 'emailPublico'
                         LEFT JOIN agent_meta email_priv ON email_priv.object_id = a.id AND email_priv.key = 'emailPrivado'
-                    WHERE 
+                    WHERE
                         u.email IN({$emails_in}) OR
                         email_pub.value IN({$emails_in}) OR
-                        email_priv.value IN({$emails_in})";  
+                        email_priv.value IN({$emails_in})";
 
         } else if ($docs_in) {
-            $sql = "SELECT count(distinct(a.user_id)) 
-                    FROM agent a 
+            $sql = "SELECT count(distinct(a.user_id))
+                    FROM agent a
                         LEFT JOIN agent_meta doc ON doc.object_id = a.id AND doc.key = 'documento'
-                    WHERE 
+                    WHERE
                         REGEXP_REPLACE(doc.value,'[^0-9]','','g') IN({$docs_in})";
         }
 
         $result = $conn->fetchColumn($sql, $params);
         $this->json($result);
     }
-
 
     function bootstrapFiles(Entity $entity, array $foreign_data, array $foreign_entity, NodeEntities\Node $node)
     {
@@ -1030,7 +1151,7 @@ class Node extends \MapasCulturais\Controller
                 $revisions[] = end($foreign_entity[$revision_key]);
                 $entity->$revision_key = $revisions;
                 $network_id = array_keys($foreign_entity[$network_ids_key])[0];
-                $entity->$network_ids_key = [$network_id => -1];
+                $entity->$network_ids_key = [$network_id => Plugin::UNKNOWN_ID];
                 $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
                     "node" => $node,
                     "user" => $app->user->id,
@@ -1052,7 +1173,7 @@ class Node extends \MapasCulturais\Controller
                         continue;
                     }
                     $network_id = array_search($file["id"], $foreign_entity[$network_ids_key]);
-                    $entity->$network_ids_key = [$network_id => -1];
+                    $entity->$network_ids_key = [$network_id => Plugin::UNKNOWN_ID];
                     $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
                         "node" => $node,
                         "user" => $app->user->id,
@@ -1092,7 +1213,6 @@ class Node extends \MapasCulturais\Controller
                     continue;
                 }
                 $network_id = array_search($list_item["id"], $foreign_entity[$network_ids_key]);
-                $entity->$network_ids_key = [$network_id => -1];
                 $metalists = $entity->metalists;
                 $new_item = new \MapasCulturais\Entities\MetaList();
                 $new_item->owner = $entity;
@@ -1109,10 +1229,9 @@ class Node extends \MapasCulturais\Controller
                 $entity->metalists = $metalists;
                 // save the new entry's network ID (as placeholder)
                 $network_ids = (array) $entity->$network_ids_key;
-                $network_ids[$network_id] = -1;
+                $network_ids[$network_id] = Plugin::UNKNOWN_ID;
                 $entity->$network_ids_key = $network_ids;
-                // inform networkID to plugin and stop network and revision IDs from being created again
-                $this->plugin->saveNetworkID($network_id);
+                // stop network and revision IDs from being created again
                 $this->plugin->skip($entity, [Plugin::SKIP_BEFORE]);
                 // save the new entry
                 $new_item->save(true);
@@ -1125,32 +1244,30 @@ class Node extends \MapasCulturais\Controller
 
     function createProxyUser(EntitiesNode $node, string $name)
     {
-        $query = new ApiQuery("MapasCulturais\\Entities\\User", [
-            "network__proxy_slug" => "EQ({$node->slug})"
-        ]);
-        if (!empty($query->findIds())) {
+        if (Plugin::getProxyUserIDForNode($node->slug)) {
             return;
         }
-        $app = App::i();
-        $app->disableAccessControl();
-        $new_user = new \MapasCulturais\Entities\User;
-        $new_user->authProvider = __CLASS__;
-        $auth_uid = uniqid();
-        $auth_uid = "{$node->slug}.{$auth_uid}@MapasNetwork";
-        $new_user->authUid = $auth_uid;
-        $new_user->email = $auth_uid;
-        $new_user->network__proxy_slug = $node->slug;
-        $app->em->persist($new_user);
-        $app->em->flush();
-        $agent = new Agent($new_user);
-        $agent->name = $name;
-        $agent->type = 2;
-        $agent->status = Agent::STATUS_ENABLED;
-        $agent->save();
-        $app->em->flush();
-        $new_user->profile = $agent;
-        $new_user->save(true);
-        $app->enableAccessControl();
+        Plugin::sudo(function () use ($node, $name) {
+            $app = App::i();
+            $new_user = new \MapasCulturais\Entities\User;
+            $new_user->authProvider = __CLASS__;
+            $auth_uid = uniqid();
+            $auth_uid = "{$node->slug}.{$auth_uid}@MapasNetwork";
+            $new_user->authUid = $auth_uid;
+            $new_user->email = $auth_uid;
+            $new_user->network__proxy_slug = $node->slug;
+            $app->em->persist($new_user);
+            $app->em->flush();
+            $agent = new Agent($new_user);
+            $agent->name = $name;
+            $agent->type = 2;
+            $agent->status = Agent::STATUS_ENABLED;
+            $agent->save();
+            $app->em->flush();
+            $new_user->profile = $agent;
+            $new_user->save(true);
+            return;
+        });
         return;
     }
 
