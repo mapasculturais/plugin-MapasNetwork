@@ -316,7 +316,7 @@ class Plugin extends \MapasCulturais\Plugin
             if ($this->status == \MapasCulturais\Entities\EventOccurrence::STATUS_PENDING) {
                 return; // do not sync pending occurrence
             }
-            if ((array_search($this->id, ($this->event->network__occurrence_ids ?? [])) == false)) {
+            if ((array_search($this->id, ((array) $this->event->network__occurrence_ids ?? [])) == false)) {
                 $plugin->registerEventOccurrence($this); // this was a pending occurrence, treat as creation
             } else {
                 $plugin->syncEventOccurrence($this, "updatedEventOccurrence");
