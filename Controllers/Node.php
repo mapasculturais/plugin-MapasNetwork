@@ -665,8 +665,7 @@ class Node extends \MapasCulturais\Controller
             $event->network__occurrence_ids = $event->network__occurrence_ids ?? [];
             // delete the item
             $id = $event->network__occurrence_ids->$network_id ?? null;
-            if (!$id) {
-                $this->errorJson("The item $network_id does not exist.", 404);
+            if (!$id) { // silently exit; the item may have already been deleted
                 return;
             }
             $item = $app->repo("EventOccurrence")->find($id);
@@ -720,8 +719,7 @@ class Node extends \MapasCulturais\Controller
             $owner->$revision_key = $revisions;
             // delete the item
             $id = $owner->$network_ids_key->$network_id ?? null;
-            if (!$id) {
-                $this->errorJson("The item $network_id does not exist.", 404);
+            if (!$id) { // silently exit; the item may have already been deleted
                 return;
             }
             $item = $app->repo("File")->find($id);
@@ -775,8 +773,7 @@ class Node extends \MapasCulturais\Controller
             $owner->$revision_key = $revisions;
             // delete the item
             $id = $owner->$network_ids_key->$network_id;
-            if (!$id) {
-                $this->errorJson("The item $network_id does not exist.", 404);
+            if (!$id) { // silently exit; the item may have already been deleted
                 return;
             }
             $item = $app->repo("MetaList")->find($id);
