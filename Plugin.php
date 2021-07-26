@@ -300,7 +300,7 @@ class Plugin extends \MapasCulturais\Plugin
                 return; // do not sync pending occurrence
             }
             $uid = uniqid("", true);
-            $revisions = $this->event->network__occurrence_revisions ?? [];
+            $revisions = (array) $this->event->network__occurrence_revisions ?? [];
             $revisions[] = "{$this->event->networkRevisionPrefix}:{$uid}";
             $this->event->network__occurrence_revisions = $revisions;
             Plugin::ensureNetworkID($this->event);
@@ -795,7 +795,7 @@ class Plugin extends \MapasCulturais\Plugin
         $event = $occurrence->event;
         $metadata_key = $this->entityMetadataKey;
         $event->$metadata_key = $event->id;
-        // we don't use foreachEntityNodeDo here because filtering filtering and looping have different references
+        // we don't use foreachEntityNodeDo here because filtering and looping have different references
         $nodes = Plugin::getEntityNodes($occurrence->event);
         foreach ($nodes as $node) {
             if (Plugin::checkNodeFilter($node, $occurrence->space)) {
