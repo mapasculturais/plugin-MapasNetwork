@@ -467,26 +467,26 @@ class Node extends \MapasCulturais\Controller
         // unlike event, space comes as embedded data, so we still need to look for the entity
         $space = $this->plugin->unserializeEntity($data["space"]);
         $node = $this->getRequestOriginNode();
-        $space_entity = $this->plugin->getEntityByNetworkId($space->network__id);
+        $space_entity = $this->plugin->getEntityByNetworkId($space["network__id"]);
         if (!$space_entity) {
-            if (!$space->owner) {
+            if (!$space["owner"]) {
                 $id = Plugin::getProxyUserIDForNode($node->slug);
                 if (!$id) {
                     throw new \Exception("The proxy user for {$node->slug} does not exist.");
                 }
                 $proxy_user = $app->repo("User")->find($id);
-                $space->owner = $proxy_user->profile;
-                $space->network__proxied_owner = $data["space"]["owner"];
+                $space["owner"] = $proxy_user->profile;
+                $space["network__proxied_owner"] = $data["space"]["owner"];
             }
             $plugin = $this->plugin;
             // the space's owner isn't necessarily the event's owner so this must be sudone
             Plugin::sudo(function () use ($plugin, $space) {
-                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space->network__id), $space->network__id, $space);
+                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space);
                 $space_entity->save(true);
                 return;
             });
         }
-        $data["space"] = "@entity:{$space->network__id}";
+        $data["space"] = "@entity:{$space["network__id"]}";
         if ($event && $space) {
             $data = $this->plugin->unserializeEntity($data);
             $plugin = $this->plugin;

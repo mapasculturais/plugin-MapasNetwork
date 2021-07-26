@@ -648,8 +648,7 @@ class Plugin extends \MapasCulturais\Plugin
                     $temp_value["network__revisions"] = $value->event->network__occurrence_revisions[$network_id];
                 }
                 if (isset($temp_value["space"])) {
-                    $temp_value["space"] = $value->space->ownerUser->id == $value->event->ownerUser->id ?
-                                           $value->space : $this->serializeEntity($value->space);
+                    $temp_value["space"] = $this->serializeEntity($value->space);
                 }
             }
             $value = $temp_value;
