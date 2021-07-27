@@ -100,12 +100,6 @@ class Plugin extends \MapasCulturais\Plugin
             return;
         });
 
-        $app->hook("template(<<agent|space>>.<<*>>.name):after", function () use ($app) {
-            /** @var MapasCulturais\Theme $this */
-            $this->part("network-node/entity-sync-switch");
-            return;
-        });
-
         $app->hook("view.includeAngularEntityAssets:after", function () use ($app) {
             $app->view->enqueueScript("app", "mapas-network", "js/ng.mapas-network.js", [/*"mapasculturais"*/]);
             $app->view->jsObject["angularAppDependencies"][] = "ng.mapas-network";
