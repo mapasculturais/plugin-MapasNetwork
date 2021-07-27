@@ -901,33 +901,9 @@ class Node extends \MapasCulturais\Controller
 
     protected function writeEntityFields(\MapasCulturais\Entity $entity, $data)
     {
-        $skip_fields = [
-            "id",
-            "user",
-            "userId",
-            "createTimestamp",
-            "updateTimestamp"
-        ];
-        $skip_null_fields = [
-            "owner",
-            "parent",
-            "agent"
-        ];
         $node = $this->getRequestOriginNode();
-
         $data = $this->plugin->unserializeEntity($data, $node);
-        foreach ($data as $key => $val) {
-            if (in_array($key, $skip_fields)) {
-                continue;
-            }
-            if (is_null($val) && in_array($key, $skip_null_fields)) {
-                continue;
-            }
-            if ($key == "terms") {
-                $val = (array) $val;
-            }
-            $entity->$key = $val;
-        }
+        Plugin::convertEntityData($entity, $data);
         return;
     }
 

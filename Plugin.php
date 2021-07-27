@@ -849,51 +849,8 @@ class Plugin extends \MapasCulturais\Plugin
         $app = App::i();
         $app->log->debug("creating $network_id");
         $entity = new $class_name;
-        $skip_fields = [
-            "id",
-            "user",
-            "userId",
-            "createTimestamp",
-            "updateTimestamp",
-            "network__occurrence_ids"
-        ];
-        $skip_null_fields = [
-            "owner",
-            "parent",
-            "agent"
-        ];
         $data = $this->unserializeEntity($data);
-        foreach ($data as $key => $val) {
-            if (in_array($key, $skip_fields)) {
-                continue;
-            }
-            if (is_null($val) && in_array($key, $skip_null_fields)) {
-                continue;
-            }
-            if (($class_name == \MapasCulturais\Entities\EventOccurrence::class)) {
-                $skip = false;
-                $prefix_length = 16; // "YYYY-mm-dd HH:ii"
-                switch ($key) {
-                    case "network__id": // network__id is kept in the event entity
-                        $skip = true;
-                        break;
-                    case "startsOn": // special conversion required
-                    case "endsOn":
-                        $prefix_length = 10; // "YYYY-mm-dd"
-                        // fall-through
-                    case "startsAt":
-                    case "endsAt":
-                        $entity->$key = substr($val["date"], 0, $prefix_length);
-                        $skip = true;
-                        break;
-                    default: break;
-                }
-                if ($skip) {
-                    continue;
-                }
-            }
-            $entity->$key = $val;
-        }
+        Plugin::convertEntityData($entity, $data);
         $entity->save(true);
         return $entity;
     }
@@ -956,6 +913,55 @@ class Plugin extends \MapasCulturais\Plugin
         $this->skip($occurrence->space->owner, [self::SKIP_BEFORE, self::SKIP_AFTER]);
         Plugin::saveMetadata($occurrence->space->owner, ["network__id"]);
         $this->syncEventOccurrence($occurrence, "createdEventOccurrence");
+        return;
+    }
+
+    static function convertEntityData(Entity $entity, array $data)
+    {
+        $skip_fields = [
+            "id",
+            "user",
+            "userId",
+            "createTimestamp",
+            "updateTimestamp",
+            "network__occurrence_ids"
+        ];
+        $skip_null_fields = [
+            "owner",
+            "parent",
+            "agent"
+        ];
+        foreach ($data as $key => $val) {
+            if (in_array($key, $skip_fields)) {
+                continue;
+            }
+            if (is_null($val) && in_array($key, $skip_null_fields)) {
+                continue;
+            }
+            if (($entity instanceof \MapasCulturais\Entities\EventOccurrence)) {
+                $skip = false;
+                $prefix_length = 16; // "YYYY-mm-dd HH:ii"
+                switch ($key) {
+                    case "network__id": // network__id is kept in the event entity
+                        $skip = true;
+                        break;
+                    case "startsOn": // special conversion required
+                    case "endsOn":
+                        $prefix_length = 10; // "YYYY-mm-dd"
+                        // fall-through
+                    case "startsAt":
+                    case "endsAt":
+                        $entity->$key = substr($val["date"], 0, $prefix_length);
+                        $skip = true;
+                        break;
+                    default: break;
+                }
+                if ($skip) {
+                    continue;
+                }
+            }
+            $entity->$key = $val;
+        }
         return;
     }
 
