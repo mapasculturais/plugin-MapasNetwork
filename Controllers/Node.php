@@ -832,7 +832,7 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
-    function POST_upatedEventOccurrence()
+    function POST_updatedEventOccurrence()
     {
         $this->requireAuthentication();
         $app = App::i();

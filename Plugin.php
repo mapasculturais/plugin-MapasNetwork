@@ -295,7 +295,12 @@ class Plugin extends \MapasCulturais\Plugin
             }
             $uid = uniqid("", true);
             $revisions = (array) $this->event->network__occurrence_revisions ?? [];
-            $revisions[] = "{$this->event->networkRevisionPrefix}:{$uid}";
+            $ids = (array) $this->event->network__occurrence_ids;
+            $network_id = array_search($this->id, $ids);
+            if (!isset($revisions[$network_id])) {
+                $revisions[$network_id] = [];
+            }
+            $revisions[$network_id][] = "{$this->event->networkRevisionPrefix}:{$uid}";
             $this->event->network__occurrence_revisions = $revisions;
             Plugin::ensureNetworkID($this->event);
             $plugin->skip($this->event, [Plugin::SKIP_BEFORE]);
@@ -638,8 +643,8 @@ class Plugin extends \MapasCulturais\Plugin
                 $temp_value["event"] = $value->event;
                 $network_id = array_search($value->id, ((array) $value->event->network__occurrence_ids ?? []));
                 $temp_value["network__id"] = $network_id;
-                if ($network_id && isset($value->event->network__occurrence_revisions[$network_id])) {
-                    $temp_value["network__revisions"] = $value->event->network__occurrence_revisions[$network_id];
+                if ($network_id && isset($value->event->network__occurrence_revisions->$network_id)) {
+                    $temp_value["network__revisions"] = $value->event->network__occurrence_revisions->$network_id;
                 }
                 if (isset($temp_value["space"])) {
                     $temp_value["space"] = $this->serializeEntity($value->space);
