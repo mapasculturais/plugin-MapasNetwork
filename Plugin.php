@@ -531,6 +531,15 @@ class Plugin extends \MapasCulturais\Plugin
             "type" => "DateTime"
         ]);
 
+        $network_tracking_metadata = [
+            "label" => i::__("Slugs dos nós que compartilham a entidade", "mapas-network"),
+            "type" => "json",
+            "default" => []
+        ];
+        $this->registerAgentMetadata("network__tracking_nodes", $network_tracking_metadata);
+        $this->registerEventMetadata("network__tracking_nodes", $network_tracking_metadata);
+        $this->registerSpaceMetadata("network__tracking_nodes", $network_tracking_metadata);
+
         // background jobs
         $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
         $app->registerJobType(new SyncEventJobType(self::JOB_SLUG_EVENT, $this));

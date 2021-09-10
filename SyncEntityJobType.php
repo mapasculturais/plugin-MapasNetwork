@@ -1,4 +1,4 @@
-<?php 
+<?php
 namespace MapasNetwork;
 
 use MapasCulturais\App;
@@ -34,10 +34,15 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
             'data' => $data,
         ];
 
-        try{
+        try {
             $app->log->info("SYNC: {$entity} -> {$node->url}");
             $node->api->apiPost("network-node/{$action}", $data, [], [CURLOPT_TIMEOUT => 30]);
-
+            $target = ($entity instanceof \MapasCulturais\Entities\EventOccurrence) ? $entity->event : $entity;
+            $nodes = (array) $target->network__tracking_nodes ?? [];
+            $nodes[$node->slug] = true;
+            $target->network__tracking_nodes = $nodes;
+            $this->plugin->skip($target, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
+            $target->save(true);
             return true;
         } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
             $app->log->debug($e->getMessage());
@@ -47,12 +52,12 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
     }
 
     /**
-     * 
-     * @param mixed $data 
-     * @param string $start_string 
-     * @param string $interval_string 
-     * @param int $iterations 
-     * @return string 
+     *
+     * @param mixed $data
+     * @param string $start_string
+     * @param string $interval_string
+     * @param int $iterations
+     * @return string
      */
     protected function _generateId(array $data, string $start_string, string $interval_string, int $iterations)
     {
