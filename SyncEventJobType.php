@@ -40,17 +40,8 @@ class SyncEventJobType extends \MapasCulturais\Definitions\JobType
         $ids = $event->network__occurrence_ids ?? [];
         $ids[$network_id] = Plugin::UNKNOWN_ID;
         $event->network__occurrence_ids = $ids;
-        $occurrence = $this->plugin->createEntity($occurrence["class_name"], $network_id, $occurrence);
-        //$revisions_key = "network__occurrence_revisions";
-        //$ids_key = "network__occurrence_ids";
-        // try {
-            //$app->log->info("SYNC: $entity -> {$node->url}");
-            //$node->api->apiPost("network-node/{$action}", $data, [],
-            //                    [CURLOPT_TIMEOUT => 30]);
-        // } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
-        //     $app->log->info($e->getMessage());
-        //     return false;
-        // }
+        $class_name = Plugin::getClassFromNetworkID($network_id);
+        $occurrence = $this->plugin->createEntity($class_name, $network_id, $occurrence);
         return true;
     }
 

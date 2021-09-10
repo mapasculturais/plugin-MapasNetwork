@@ -501,6 +501,7 @@ class Node extends \MapasCulturais\Controller
             if (preg_match("#@entity:(.*)#", $data["event"], $event_id)) {
                 $app->enqueueJob(Plugin::JOB_SLUG_EVENT, [
                     "event" => $event_id[0],
+                    "space" => $data["space"],
                     "node" => $node,
                     "nodeSlug" => $node->slug,
                     "data" => $data
