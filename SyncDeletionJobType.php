@@ -33,6 +33,16 @@ class SyncDeletionJobType extends \MapasCulturais\Definitions\JobType
                             "-> {$node->url}");
             $node->api->apiPost("network-node/{$job->syncAction}", $data, [],
                                 [CURLOPT_TIMEOUT => 30]);
+            $entity = $this->plugin->getEntityByNetworkId(in_array($job->className, ["Agent", "Event", "Space"]) ? $job->networkID : $job->ownerNetworkID);
+            if ($entity != null) {
+                $nodes = (array) $entity->network__tracking_nodes ?? [];
+                if (isset($nodes[$node->slug])) {
+                    unset($nodes[$node->slug]);
+                    $entity->network__tracking_nodes = $nodes;
+                    $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
+                    $entity->save(true);
+                }
+            }
         } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
             $app->log->debug($e->getMessage());
             return false;

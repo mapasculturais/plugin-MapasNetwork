@@ -653,8 +653,6 @@ class Node extends \MapasCulturais\Controller
         $event_class = $this->postData["ownerClassName"];
         $event_network_id = $this->postData["ownerNetworkID"];
         $network_id = $this->postData["network__id"];
-        $revisions = $this->postData["revisions"] ?? [];
-        $revision_id = isset($revisions) ? end($revisions) : null;
         // obtain the owner entity
         $query = new ApiQuery($event_class, [
             "network__id" => "EQ({$event_network_id})",
@@ -676,6 +674,48 @@ class Node extends \MapasCulturais\Controller
             $event->save(true);
             $item->delete(true);
         }
+        return;
+    }
+
+    function POST_descopedEventOccurrence()
+    { // the name of the endpoint is used in the hooks, do not unify these
+        $this->deletedEventOccurrence();
+        return;
+    }
+
+    function POST_deletedEntity()
+    {
+        $this->requireAuthentication();
+        $app = App::i();
+        $entity_class = $this->postData["className"];
+        $network_id = $this->postData["network__id"];
+        $revisions = $this->postData["network__revisions"];
+        $revision_id = isset($revisions) ? end($revisions) : null;
+        $classes = [
+            Agent::class,
+            Space::class,
+        ];
+        if (!in_array($entity_class, $classes)) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user,
+                                       "delete entity");
+        }
+        // obtain the entity
+        $query = new ApiQuery($entity_class, [
+            "network__id" => "EQ({$network_id})",
+            "user" => "EQ({$app->user->id})"
+        ]);
+        if ($ids = $query->findIds()) {
+            $id = $ids[0];
+            $entity = $app->repo($entity_class)->find($id);
+            $entity->delete(true);
+        }
+        return;
+    }
+
+    function POST_descopedEntity()
+    { // the name of the endpoint is used in the hooks, do not unify these
+        $this->POST_deletedEntity();
         return;
     }
 
@@ -837,7 +877,63 @@ class Node extends \MapasCulturais\Controller
     {
         $this->requireAuthentication();
         $app = App::i();
-        // TODO
+        $class_name = $this->postData["className"];
+        $data = $this->postData["data"];
+        $network_id = $data["network__id"];
+        $revision_id = end($data["network__revisions"]);
+        if (isset($data[$this->plugin->entityMetadataKey])) {
+            $this->json("ok");
+            return;
+        }
+        if ($class_name !== EventOccurrence::class) {
+            // @todo arrumar esse throw
+            throw new PermissionDenied($app->user, $app->user, "update");
+        }
+        $event = $this->plugin->unserializeEntity($data["event"]);
+        $revisions = (array) $event->network__occurrence_revisions;
+        if (in_array($revision_id, ($revisions[$network_id] ?? []))) {
+            $this->json("$network_id $revision_id already exists");
+            return;
+        }
+        $revisions[$network_id][] = $revision_id;
+        // unlike event, space comes as embedded data, so we still need to look for the entity
+        $space = $this->plugin->unserializeEntity($data["space"]);
+        $node = $this->getRequestOriginNode();
+        $space_entity = $this->plugin->getEntityByNetworkId($space["network__id"]);
+        if (!$space_entity) {
+            if (!$space["owner"]) {
+                $id = Plugin::getProxyUserIDForNode($node->slug);
+                if (!$id) {
+                    throw new \Exception("The proxy user for {$node->slug} does not exist.");
+                }
+                $proxy_user = $app->repo("User")->find($id);
+                $space["owner"] = $proxy_user->profile;
+                $space["network__proxied_owner"] = $data["space"]["owner"];
+            }
+            $plugin = $this->plugin;
+            // the space's owner isn't necessarily the event's owner so this must be sudone
+            Plugin::sudo(function () use ($plugin, $space) {
+                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space);
+                $space_entity->save(true);
+                return;
+            });
+        }
+        $data["space"] = "@entity:{$space["network__id"]}";
+        $data = $this->plugin->unserializeEntity($data);
+        Plugin::sudo(function () use ($app, $class_name, $data, $network_id, $revisions) {
+            $event = $data["event"];
+            $ids_map = ((array) $event->network__occurrence_ids) ?? [];
+            $event->network__occurrence_ids = $ids_map;
+            $event->network__occurrence_revisions = $revisions;
+            $entity = $app->repo($class_name)->find($ids_map[$network_id]);
+            $this->writeEntityFields($entity, $data);
+            // stop revision ID from being created again
+            $this->plugin->skip($event, [Plugin::SKIP_BEFORE]);
+            $event->save(true);
+            $entity->save(true);
+            return;
+        });
+        $this->json("OK");
         return;
     }
 

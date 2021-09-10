@@ -266,10 +266,12 @@ class Plugin extends \MapasCulturais\Plugin
             $plugin->skip($this->event, [self::SKIP_BEFORE, self::SKIP_AFTER]);
             Plugin::saveMetadata($this->event, ["network__occurrence_ids", "network__occurrence_revisions"]);
             $nodes = Plugin::getEntityNodes($this->event);
+            $is_descope = str_ends_with($_SERVER["REQUEST_URI"], "/descopedEventOccurrence");
+            $tracking_nodes = (array) $this->event->network__tracking_nodes;
             foreach ($nodes as $node) {
-                if (Plugin::checkNodeFilter($node, $this->space)) {
+                if (Plugin::checkNodeFilter($node, $this->space) || ($is_descope && isset($tracking_nodes[$node->slug]))) {
                     App::i()->enqueueJob(self::JOB_SLUG_DELETION, [
-                        "syncAction" => "deletedEventOccurrence",
+                        "syncAction" => $is_descope ? "descopedEventOccurrence" : "deletedEventOccurrence",
                         "entity" => $this->jsonSerialize(),
                         "node" => $node,
                         "nodeSlug" => $node->slug,
@@ -784,15 +786,38 @@ class Plugin extends \MapasCulturais\Plugin
         $metadata_key = $this->entityMetadataKey;
         $entity->$metadata_key = $entity->id;
         $nodes = Plugin::getEntityNodes($entity);
+        $destination_nodes = array_filter($nodes, function ($node) use ($entity) {
+            return Plugin::checkNodeFilter($node, $entity);
+        });
+        $tracking_nodes = (array) $entity->network__tracking_nodes ?? [];
         foreach ($nodes as $node) {
-            if (Plugin::checkNodeFilter($node, $entity)) {
+            if (isset($tracking_nodes[$node->slug])) {
+                $tracking_nodes[$node->slug] = $node;
+            }
+        }
+        foreach ($destination_nodes as $node) {
                 $app->enqueueJob(self::JOB_SLUG, [
                     "syncAction" => $action,
                     "entity" => $entity,
                     "node" => $node,
                     "nodeSlug" => $node->slug
                 ]);
-            }
+            unset($tracking_nodes[$node->slug]);
+        }
+        foreach ($tracking_nodes as $slug => $node) {
+            $app->enqueueJob(self::JOB_SLUG_DELETION, [
+                "syncAction" => "descopedEntity",
+                "entity" => $entity->jsonSerialize(),
+                "node" => $node,
+                "nodeSlug" => $slug,
+                "networkID" => $entity->network__id,
+                "className" => $entity->className,
+                "ownerClassName" => $entity->owner->className,
+                "ownerNetworkID" => $entity->owner->network__id,
+                "group" => "",
+                "revisions_key" => "network__revisions",
+                "revisions" => $entity->network__revisions
+        ]);
         }
         return;
     }
@@ -812,6 +837,29 @@ class Plugin extends \MapasCulturais\Plugin
                     "entity" => $occurrence,
                     "node" => $node,
                     "nodeSlug" => $node->slug
+                ]);
+            } else if ($action != "createdEventOccurrence") {
+                /* If an occurrence update changes the space such that it no
+                   longer passes the filter, any nodes that previously passed
+                   the filter need to know about it (i.e. delete). A different
+                   endpoint is used because propagation must take into account
+                   how this deletion came to be.
+                 */
+                $ids = (array) $event->network__occurrence_ids;
+                $network_id = array_search($occurrence->id, $ids);
+                $revisions = (array) $event->network__occurrence_revisions;
+                $app->enqueueJob(self::JOB_SLUG_DELETION, [
+                    "syncAction" => "descopedEventOccurrence",
+                    "entity" => $occurrence->jsonSerialize(),
+                    "node" => $node,
+                    "nodeSlug" => $node->slug,
+                    "networkID" => $network_id,
+                    "className" => $occurrence->className,
+                    "ownerClassName" => $event->className,
+                    "ownerNetworkID" => $event->network__id,
+                    "group" => "occurrence",
+                    "revisions_key" => "network__occurrence_revisions",
+                    "revisions" => $revisions
                 ]);
             }
         }
