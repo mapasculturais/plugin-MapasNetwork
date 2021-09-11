@@ -1003,6 +1003,7 @@ class Plugin extends \MapasCulturais\Plugin
                         break;
                     case "startsOn": // special conversion required
                     case "endsOn":
+                    case "until":
                         $prefix_length = 10; // "YYYY-mm-dd"
                         // fall-through
                     case "startsAt":
