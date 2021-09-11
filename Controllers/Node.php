@@ -767,8 +767,14 @@ class Node extends \MapasCulturais\Controller
             // stop revision ID from being created again
             $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
             // the owner must be saved since the IDs are kept there
+            if ($item) {
+                $item->delete(true);
+            } else { // edge case, remove network_id for deleted item
+                $network_ids = (array) $owner->$network_ids_key;
+                unset($network_ids[$network_id]);
+                $owner->$network_ids_key = $network_ids;
+            }
             $owner->save(true);
-            $item->delete(true);
         }
         return;
     }

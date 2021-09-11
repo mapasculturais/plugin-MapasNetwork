@@ -80,7 +80,6 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         $file->group = $data["group"];
         $file->owner = $owner;
         // inform network ID to the plugin and prevent it from being created again
-        $this->plugin->saveNetworkID($network_id);
         $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
         $file->save(true);
         return true;
