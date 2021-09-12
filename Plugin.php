@@ -208,7 +208,7 @@ class Plugin extends \MapasCulturais\Plugin
 
         $app->hook("$entities_hook_prefix_all.update:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entity $this */
-            if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this] ?? []))) {
+            if ($plugin->shouldSkip($this, self::SKIP_BEFORE)) {
                 return;
             }
             Plugin::ensureNetworkID($this);
@@ -221,7 +221,7 @@ class Plugin extends \MapasCulturais\Plugin
 
         $app->hook("$entities_hook_prefix_all.update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entity $this */
-            if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this] ?? []))) {
+            if ($plugin->shouldSkip($this, self::SKIP_AFTER)) {
                 return;
             }
             $plugin->syncEntity($this, "updatedEntity");
@@ -231,7 +231,7 @@ class Plugin extends \MapasCulturais\Plugin
         // for insertion, we need to watch EventOccurrence insertion rather than Event insertion
         $app->hook("entity(EventOccurrence).insert:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
-            if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->event] ?? []))) {
+            if ($plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
                 return;
             }
             Plugin::ensureNetworkID($this->event);
@@ -239,9 +239,10 @@ class Plugin extends \MapasCulturais\Plugin
             Plugin::ensureNetworkID($this->space->owner);
             return;
         });
+
         $app->hook("entity(EventOccurrence).insert:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
-            if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this->event] ?? []))) {
+            if ($plugin->shouldSkip($this->event, self::SKIP_AFTER)) {
                 return;
             }
             if ($this->status == \MapasCulturais\Entities\EventOccurrence::STATUS_PENDING) {
@@ -250,8 +251,12 @@ class Plugin extends \MapasCulturais\Plugin
             $plugin->registerEventOccurrence($this);
             return;
         });
+
         $app->hook("entity(EventOccurrence).remove:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
+            if ($plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
+                return;
+            }
             if ($this->status == \MapasCulturais\Entities\EventOccurrence::STATUS_PENDING) {
                 return; // this is a no-op since we never sync a pending occurrence
             }
@@ -289,7 +294,7 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("entity(EventOccurrence).update:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
-            if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->event] ?? []))) {
+            if ($plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
                 return;
             }
             if ($this->status == \MapasCulturais\Entities\EventOccurrence::STATUS_PENDING) {
@@ -311,7 +316,7 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("entity(EventOccurrence).update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
-            if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this->event] ?? []))) {
+            if ($plugin->shouldSkip($this->event, self::SKIP_AFTER)) {
                 return;
             }
             if ($this->status == \MapasCulturais\Entities\EventOccurrence::STATUS_PENDING) {
@@ -331,7 +336,7 @@ class Plugin extends \MapasCulturais\Plugin
             if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
                 return;
             }
-            if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
+            if ($plugin->shouldSkip($this->owner, self::SKIP_BEFORE)) {
                 return;
             }
             $uid = uniqid("", true);
@@ -349,6 +354,9 @@ class Plugin extends \MapasCulturais\Plugin
             if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
                 return;
             }
+            if ($plugin->shouldSkip($this->owner, self::SKIP_AFTER)) {
+                return;
+            }
             $ids_key = "network__ids_metalist_{$this->group}";
             if (Plugin::ensureNetworkID($this, $this->owner, $ids_key)) {
                 $plugin->skip($this->owner, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
@@ -362,7 +370,7 @@ class Plugin extends \MapasCulturais\Plugin
             if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
                 return;
             }
-            if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
+            if ($plugin->shouldSkip($this->owner, self::SKIP_BEFORE)) {
                 return;
             }
             $uid = uniqid("", true);
@@ -377,10 +385,10 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix_all.$metalist_hook_component.update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
-            if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
+            if ($plugin->shouldSkip($this->owner, self::SKIP_AFTER)) {
                 return;
             }
-            if (in_array(self::SKIP_AFTER, ($plugin->skipList[(string) $this->owner] ?? []))) {
+            if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
                 return;
             }
             $plugin->syncMetaList($this, "updatedMetaList");
@@ -388,6 +396,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix_all.$metalist_hook_component.remove:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
+            if ($plugin->shouldSkip($this->owner, self::SKIP_BEFORE)) {
+                return;
+            }
             if (!in_array($this->group, $plugin->allowedMetaListGroups)) {
                 return;
             }
@@ -396,7 +407,7 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix_all.file(<<*>>).insert:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\File $this */
-            if (in_array(self::SKIP_BEFORE, ($plugin->skipList[(string) $this->owner] ?? []))) {
+            if ($plugin->shouldSkip($this->owner, self::SKIP_BEFORE)) {
                 return;
             }
             $uid = uniqid("", true);
@@ -411,6 +422,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix_all.file(<<*>>).insert:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\File $this */
+            if ($plugin->shouldSkip($this->owner, self::SKIP_AFTER)) {
+                return;
+            }
             $ids_key = "network__ids_files_{$this->group}";
             if (Plugin::ensureNetworkID($this, $this->owner, $ids_key)) {
                 $plugin->skip($this->owner, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
@@ -421,6 +435,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("$entities_hook_prefix_all.file(<<*>>).remove:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\File $this */
+            if ($plugin->shouldSkip($this->owner, self::SKIP_BEFORE)) {
+                return;
+            }
             $plugin->requestDeletion($this, "deletedFile", $this->group, "files");
             return;
         });
@@ -483,30 +500,32 @@ class Plugin extends \MapasCulturais\Plugin
     function register()
     {
         $app = App::i();
-
         $app->registerController("network-node", "\\MapasNetwork\\Controllers\\Node");
-
-
-        // Registra metadados
+        // synchronisation flag
+        $sync_flag = [
+            "label" => i::__("Flag de controle da sincronização automática", "mapas-network"),
+            "type" => "boolean",
+            "default" => true
+        ];
+        $this->registerAgentMetadata("network__sync_flag", $sync_flag);
+        $this->registerEventMetadata("network__sync_flag", $sync_flag);
+        $this->registerSpaceMetadata("network__sync_flag", $sync_flag);
+        // register metadata
         $revisions_metadata = [
             'label' => i::__('Lista das revisões da rede', 'mapas-network'),
             'type' => 'json',
             'default' => []
         ];
-
         $this->registerAgentMetadata('network__revisions', $revisions_metadata);
         $this->registerEventMetadata('network__revisions', $revisions_metadata);
         $this->registerSpaceMetadata('network__revisions', $revisions_metadata);
-
         $network_id_metadata = [
             'label' => i::__('Id da entidade na rede de mapas', 'mapas-network'),
             'type' => 'string',
         ];
-
         $this->registerAgentMetadata('network__id', $network_id_metadata);
         $this->registerEventMetadata('network__id', $network_id_metadata);
         $this->registerSpaceMetadata('network__id', $network_id_metadata);
-
         // similar to files and metalists, these are dictionaries keyed by the network__id
         $this->registerEventMetadata("network__occurrence_ids", [
             "label" => i::__("Ids das ocorrências na rede de Mapas", "mapas-network"),
@@ -518,12 +537,10 @@ class Plugin extends \MapasCulturais\Plugin
             "type" => "json",
             "default" => []
         ]);
-
         $this->registerSpaceMetadata("network__proxied_owner", [
             "label" => i::__("O network Id do proprietário original do espaço", "mapas-network"),
             "type" => "string"
         ]);
-
         $this->registerUserMetadata("network__proxy_slug", [
             "label" => i::__("Se este usuário é proxy de alguma instalação, o slug da mesma.", "mapas-network"),
             "type" => "string"
@@ -532,7 +549,6 @@ class Plugin extends \MapasCulturais\Plugin
             "label" => i::__("Data da próxima verificação por contas nos nodes", "mapas-network"),
             "type" => "DateTime"
         ]);
-
         $network_tracking_metadata = [
             "label" => i::__("Slugs dos nós que compartilham a entidade", "mapas-network"),
             "type" => "json",
@@ -541,7 +557,6 @@ class Plugin extends \MapasCulturais\Plugin
         $this->registerAgentMetadata("network__tracking_nodes", $network_tracking_metadata);
         $this->registerEventMetadata("network__tracking_nodes", $network_tracking_metadata);
         $this->registerSpaceMetadata("network__tracking_nodes", $network_tracking_metadata);
-
         // background jobs
         $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
         $app->registerJobType(new SyncEventJobType(self::JOB_SLUG_EVENT, $this));
@@ -554,14 +569,15 @@ class Plugin extends \MapasCulturais\Plugin
         return;
     }
 
-    function getNodeSlug () {
+    function getNodeSlug()
+    {
         return $this->_config['nodeSlug'];
     }
 
-    function getEntityMetadataKey() {
+    function getEntityMetadataKey()
+    {
         // @todo trocar por slug do nó
         $slug = $this->nodeSlug;
-
         return "network__{$slug}_entity_id";
     }
 
@@ -970,6 +986,17 @@ class Plugin extends \MapasCulturais\Plugin
         Plugin::saveMetadata($occurrence->space->owner, ["network__id"]);
         $this->syncEventOccurrence($occurrence, "createdEventOccurrence");
         return;
+    }
+
+    function shouldSkip(\MapasCulturais\Entity $entity, $skip_type)
+    {
+        if (in_array($skip_type, ($this->skipList[(string) $entity] ?? []))) {
+            return true;
+        }
+        if (!($entity->network__sync_flag ?? true)) {
+            return true;
+        }
+        return false;
     }
 
     static function convertEntityData(Entity $entity, array $data)
