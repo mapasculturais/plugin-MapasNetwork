@@ -833,6 +833,21 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
+    function POST_syncControl()
+    {
+        $this->requireAuthentication();
+        $app = App::i();
+        $network_id = $this->postData["network__id"];
+        $value = ($this->postData["value"] == "true") ? Plugin::SYNC_ON : Plugin::SYNC_OFF;
+        $entity = $this->plugin->getEntityByNetworkId($network_id);
+        if ($entity->ownerUser->id != $app->user->id) {
+            throw new PermissionDenied($app->user, $entity, "control synchronization of");
+        }
+        $entity->network__sync_control = $value;
+        $entity->save(true);
+        return;
+    }
+
     function POST_updatedEntity()
     {
         $this->requireAuthentication();

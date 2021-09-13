@@ -43,6 +43,10 @@ class Plugin extends \MapasCulturais\Plugin
     const SKIP_AFTER = "after";
     const SKIP_BEFORE = "before";
 
+    const SYNC_ON = 0;
+    const SYNC_OFF = 1;
+    const SYNC_AUTO_OFF = 2;
+
     const UNKNOWN_ID = -1;
 
     protected $allowedMetaListGroups = ["links", "videos"];
@@ -97,6 +101,22 @@ class Plugin extends \MapasCulturais\Plugin
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
             $app->view->enqueueStyle("app", "mapas-network",
                                      "css/mapas-network.css");
+            return;
+        });
+
+        $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
+            /** @var MapasCulturais\Theme $this */
+            $entity = $this->controller->requestedEntity;
+            if ($app->user->id == $entity->ownerUser->id) {
+                $app->view->jsObject["entity"]["syncControl"] = !!($entity->network__sync_control ?? self::SYNC_ON);
+                $app->view->jsObject["entity"]["networkId"] = $entity->network__id;
+                $app->view->jsObject["gettext"]["pluginMapasNetwork"] = [
+                    "syncControlError" => i::__("Ocorreu um erro ao alterar o controle de sincronização.", "mapas-network"),
+                    "syncDisabled" => i::__("Sincronização desabilitada.", "mapas-network"),
+                    "syncEnabled" => i::__("Sincronização habilitada", "mapas-network")
+                ];
+                $this->part("network-node/entity-sync-switch");
+            }
             return;
         });
 
@@ -225,6 +245,18 @@ class Plugin extends \MapasCulturais\Plugin
                 return;
             }
             $plugin->syncEntity($this, "updatedEntity");
+            return;
+        });
+
+        $app->hook("entity(<<agent|event|space>>).meta(network__sync_control).update:after", function () use ($plugin) {
+            /** @var \MapasCulturais\Entities\Metadata $this */
+            if ($this->value != self::SYNC_ON) {
+                return;
+            }
+            $auto_off = self::SYNC_AUTO_OFF;
+            if ($this->owner->changedMetadata["network__sync_control"]["oldValue"] == "$auto_off") {
+                $plugin->syncEntity($this->owner, "updatedEntity");
+            }
             return;
         });
 
@@ -501,15 +533,15 @@ class Plugin extends \MapasCulturais\Plugin
     {
         $app = App::i();
         $app->registerController("network-node", "\\MapasNetwork\\Controllers\\Node");
-        // synchronisation flag
-        $sync_flag = [
-            "label" => i::__("Flag de controle da sincronização automática", "mapas-network"),
-            "type" => "boolean",
-            "default" => true
+        // synchronisation control
+        $sync_control = [
+            "label" => i::__("Controle da sincronização automática", "mapas-network"),
+            "type" => "int",
+            "default" => self::SYNC_ON
         ];
-        $this->registerAgentMetadata("network__sync_flag", $sync_flag);
-        $this->registerEventMetadata("network__sync_flag", $sync_flag);
-        $this->registerSpaceMetadata("network__sync_flag", $sync_flag);
+        $this->registerAgentMetadata("network__sync_control", $sync_control);
+        $this->registerEventMetadata("network__sync_control", $sync_control);
+        $this->registerSpaceMetadata("network__sync_control", $sync_control);
         // register metadata
         $revisions_metadata = [
             'label' => i::__('Lista das revisões da rede', 'mapas-network'),
@@ -812,12 +844,12 @@ class Plugin extends \MapasCulturais\Plugin
             }
         }
         foreach ($destination_nodes as $node) {
-                $app->enqueueJob(self::JOB_SLUG, [
-                    "syncAction" => $action,
-                    "entity" => $entity,
-                    "node" => $node,
-                    "nodeSlug" => $node->slug
-                ]);
+            $app->enqueueJob(self::JOB_SLUG, [
+                "syncAction" => $action,
+                "entity" => $entity,
+                "node" => $node,
+                "nodeSlug" => $node->slug
+            ]);
             unset($tracking_nodes[$node->slug]);
         }
         foreach ($tracking_nodes as $slug => $node) {
@@ -833,7 +865,7 @@ class Plugin extends \MapasCulturais\Plugin
                 "group" => "",
                 "revisions_key" => "network__revisions",
                 "revisions" => $entity->network__revisions
-        ]);
+            ]);
         }
         return;
     }
@@ -993,7 +1025,21 @@ class Plugin extends \MapasCulturais\Plugin
         if (in_array($skip_type, ($this->skipList[(string) $entity] ?? []))) {
             return true;
         }
-        if (!($entity->network__sync_flag ?? true)) {
+        if (($entity->network__sync_control ?? self::SYNC_ON) != self::SYNC_ON) {
+            return true;
+        } else if (App::i()->user->id != $entity->ownerUser->id) {
+            Plugin::ensureNetworkID($entity);
+            $uid = uniqid("", true);
+            $revisions = $entity->network__revisions;
+            $revisions[] = "{$entity->networkRevisionPrefix}:{$uid}";
+            $entity->network__revisions = $revisions;
+            $entity->network__sync_control = self::SYNC_AUTO_OFF;
+            // notifies user that synchronisation is disabled
+            $notification = new \MapasCulturais\Entities\Notification;
+            $notification->user = $entity->ownerUser;
+            $message = i::__("A sincronização para %s foi automaticamente desabilitada. Visite a página para reabilitar.", "mapas-network");
+            $notification->message = sprintf($message, "<a href=\"{$entity->singleUrl}\" >{$entity->name}</a>");
+            $notification->save(true);
             return true;
         }
         return false;
@@ -1007,7 +1053,8 @@ class Plugin extends \MapasCulturais\Plugin
             "userId",
             "createTimestamp",
             "updateTimestamp",
-            "network__occurrence_ids"
+            "network__occurrence_ids",
+            "network__sync_control"
         ];
         $skip_null_fields = [
             "owner",
