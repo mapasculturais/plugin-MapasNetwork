@@ -508,6 +508,7 @@ class Plugin extends \MapasCulturais\Plugin
      * @return bool
      */
     static function checkNodeFilter(Entities\Node $node, Entity $entity) {
+        
         $filters = $node->getFilters($entity->entityType);
 
         foreach($filters as &$value) {
@@ -523,8 +524,6 @@ class Plugin extends \MapasCulturais\Plugin
         $query = new ApiQuery($entity->className, $filters);
 
         $result = $query->findIds() == [$entity->id];
-
-        // @todo: Verificar se a entidade já está conectada com o nó e retornar true ou pensar no que fazer quando a condição de sincronizaçào não mais for atendida.
 
         return $result;
     }
@@ -834,8 +833,15 @@ class Plugin extends \MapasCulturais\Plugin
         $metadata_key = $this->entityMetadataKey;
         $entity->$metadata_key = $entity->id;
         $nodes = Plugin::getEntityNodes($entity);
+
         $destination_nodes = array_filter($nodes, function ($node) use ($entity) {
-            return Plugin::checkNodeFilter($node, $entity);
+            $node_entity_metadata_key = $node->entityMetadataKey;
+            // se a entidade já está vinculada, retorna true
+            if($entity->$node_entity_metadata_key ?? false) {
+                return true;
+            } else {
+                return Plugin::checkNodeFilter($node, $entity);
+            }
         });
         $tracking_nodes = (array) $entity->network__tracking_nodes ?? [];
         foreach ($nodes as $node) {
