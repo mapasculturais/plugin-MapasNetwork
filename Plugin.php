@@ -480,8 +480,12 @@ class Plugin extends \MapasCulturais\Plugin
             if ($date < new DateTime()) {
                 $repo = $app->repo(Entities\Node::class);
                 $nodes = $repo->findBy(["user" => $app->user]);
-                if ($plugin->findAccounts($nodes)) {
-                    $plugin->redirectTo = $app->createUrl("network-node", "panel");
+                try {
+                    if ($plugin->findAccounts($nodes)) {
+                        $plugin->redirectTo = $app->createUrl("network-node", "panel");
+                    }
+                } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
+                    $app->log->debug($e->getMessage());
                 }
             }
         });
