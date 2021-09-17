@@ -50,6 +50,7 @@ class Plugin extends \MapasCulturais\Plugin
     const UNKNOWN_ID = -1;
 
     protected $allowedMetaListGroups = ["links", "videos"];
+    protected $redirectTo = null;
 
     function __construct(array $config = [])
     {
@@ -81,7 +82,6 @@ class Plugin extends \MapasCulturais\Plugin
             $this->part("network-node/panel-mapas-network-sidebar.php");
             return;
         });
-
         $app->hook("GET(network-node.<<*>>):before", function () use ($app) {
             $app->view->enqueueScript("app", "ng.mc.module.notifications",
                                       "js/ng.mc.module.notifications.js");
@@ -97,13 +97,11 @@ class Plugin extends \MapasCulturais\Plugin
                                       "css/mapas-network.css");
             return;
         });
-
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
             $app->view->enqueueStyle("app", "mapas-network",
                                      "css/mapas-network.css");
             return;
         });
-
         $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
             /** @var MapasCulturais\Theme $this */
             $entity = $this->controller->requestedEntity;
@@ -119,7 +117,6 @@ class Plugin extends \MapasCulturais\Plugin
             }
             return;
         });
-
         $app->hook("view.includeAngularEntityAssets:after", function () use ($app) {
             $app->view->enqueueScript("app", "mapas-network", "js/ng.mapas-network.js", [/*"mapasculturais"*/]);
             $app->view->jsObject["angularAppDependencies"][] = "ng.mapas-network";
@@ -215,7 +212,6 @@ class Plugin extends \MapasCulturais\Plugin
             $value = "{$slug}:$entity_id";
             return;
         });
-
         $app->hook("{$entities_hook_prefix}.insert:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entity $this */
             if (Plugin::ensureNetworkID($this)) {
@@ -225,7 +221,6 @@ class Plugin extends \MapasCulturais\Plugin
             $plugin->syncEntity($this, "createdEntity");
             return;
         });
-
         $app->hook("$entities_hook_prefix_all.update:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entity $this */
             if ($plugin->shouldSkip($this, self::SKIP_BEFORE)) {
@@ -238,7 +233,6 @@ class Plugin extends \MapasCulturais\Plugin
             $this->network__revisions = $revisions;
             return;
         });
-
         $app->hook("$entities_hook_prefix_all.update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entity $this */
             if ($plugin->shouldSkip($this, self::SKIP_AFTER)) {
@@ -247,7 +241,6 @@ class Plugin extends \MapasCulturais\Plugin
             $plugin->syncEntity($this, "updatedEntity");
             return;
         });
-
         $app->hook("entity(<<agent|event|space>>).meta(network__sync_control).update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\Metadata $this */
             if ($this->value != self::SYNC_ON) {
@@ -271,7 +264,6 @@ class Plugin extends \MapasCulturais\Plugin
             Plugin::ensureNetworkID($this->space->owner);
             return;
         });
-
         $app->hook("entity(EventOccurrence).insert:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
             if ($plugin->shouldSkip($this->event, self::SKIP_AFTER)) {
@@ -283,7 +275,6 @@ class Plugin extends \MapasCulturais\Plugin
             $plugin->registerEventOccurrence($this);
             return;
         });
-
         $app->hook("entity(EventOccurrence).remove:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
             if ($plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
@@ -480,23 +471,26 @@ class Plugin extends \MapasCulturais\Plugin
          * O redirecionamento acontece no primeiro login após a instalação do plugin ou em
          * um intervalo configurado no plugin.
          */
-        $app->hook('auth.login', function () use ($app, $plugin) {
+        $app->hook("auth.login", function () use ($app, $plugin) {
             // se está no processo de vinculação, não redireciona
-            if (($_SESSION['mapas-network:timestamp'] ?? null) > new DateTime()) {
+            if (($_SESSION["mapas-network:timestamp"] ?? null) > new DateTime()) {
                 return;
             }
-
             $date = $app->user->network__next_verification_datetime;
             if ($date < new DateTime()) {
                 $repo = $app->repo(Entities\Node::class);
                 $nodes = $repo->findBy(["user" => $app->user]);
                 if ($plugin->findAccounts($nodes)) {
-                    $app->redirect($app->createUrl('network-node', 'panel'));
-                    exit;
+                    $plugin->redirectTo = $app->createUrl("network-node", "panel");
                 }
             }
         });
-
+        $app->hook("auth.successful:redirectUrl", function (&$redirectUrl) use ($plugin) {
+            if ($plugin->redirectTo) {
+                $redirectUrl = $plugin->redirectTo;
+            }
+            return;
+        });
         return;
     }
 
