@@ -8,7 +8,7 @@ Seguindo as convenções do Mapas Culturais, o caminho do plugin seria
 `/var/www/html/protected/application/plugins/MapasNetwork`. Preenchido esse
 requisito, o arquivo de configuração dos plugins deve conter uma entrada que
 faz referência ao MapasNetwork, como no exemplo a seguir.
-```
+```PHP
 <?php
 return [
     // entradas para os outros plugins
