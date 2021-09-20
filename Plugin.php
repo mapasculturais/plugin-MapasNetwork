@@ -472,9 +472,18 @@ class Plugin extends \MapasCulturais\Plugin
          * um intervalo configurado no plugin.
          */
         $app->hook("auth.login", function () use ($app, $plugin) {
-            // se está no processo de vinculação, não redireciona
+            // se está no processo de vinculação, salva o redirect original para uso posterior
             if (($_SESSION["mapas-network:timestamp"] ?? null) > new DateTime()) {
+                $plugin->redirectTo = $app->auth->redirectPath;
                 return;
+            } else { // vinculação expirada, remove dados da sessão
+                unset(
+                    $_SESSION["mapas-network:timestamp"],
+                    $_SESSION["mapas-network:to"],
+                    $_SESSION["mapas-network:token"],
+                    $_SESSION["mapas-network:name"],
+                    $_SESSION["mapas-network:confirmed"]
+                );
             }
             $date = $app->user->network__next_verification_datetime;
             if ($date < new DateTime()) {
