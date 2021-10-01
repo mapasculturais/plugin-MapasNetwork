@@ -514,24 +514,21 @@ class Plugin extends \MapasCulturais\Plugin
      * @param Entity $entity
      * @return bool
      */
-    static function checkNodeFilter(Entities\Node $node, Entity $entity) {
-        
+    static function checkNodeFilter(Entities\Node $node, Entity $entity)
+    {
         $filters = $node->getFilters($entity->entityType);
-
-        foreach($filters as &$value) {
+        foreach ($filters as &$value) {
             if (is_array($value)) {
-                $imploded = implode(',', $value);
+                $imploded = implode(",", $value);
                 $value = "IN($imploded)";
             } else {
                 $value = "EQ($value)";
             }
         }
-
-        $filters['id'] = "EQ($entity->id)";
+        $filters["id"] = "EQ($entity->id)";
+        App::i()->em->flush($entity); // we expect this ApiQuery to operate on up-to-date data
         $query = new ApiQuery($entity->className, $filters);
-
         $result = $query->findIds() == [$entity->id];
-
         return $result;
     }
 
