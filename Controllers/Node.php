@@ -1051,77 +1051,32 @@ class Node extends \MapasCulturais\Controller
     function POST_bootstrapSync()
     {
         $this->requireAuthentication();
-
         $app = App::i();
-
-        $agents_data = $this->postData['agents'] ?? [];
         $origin_node = $this->getRequestOriginNode();
-
-        $entities = array_merge($app->user->getEnabledAgents(), $app->user->getEnabledSpaces());
-        foreach ($agents_data as $foreign_data) {
-            $linked = false;
-            foreach ($entities as $entity) {
-                if ($this->compareEntityData($entity, $foreign_data)) {
-                    $linked = true;
-                    $entity->{"network__{$origin_node->slug}_entity_id"} = $foreign_data['id'];
-
-                    $data = [];
-
-                    $agent_updated = $entity->updateTimestamp ?? $entity->createTimestamp;
-                    $foreign_updated = new DateTime($foreign_data['updateTimestamp']['date'] ?? $foreign_data['createTimestamp']['date']);
-
-                    // faz merge das infos que vieram no request com a info do agente, mantendo a versão mais nova da info.
-                    foreach ($foreign_data as $key => $val) {
-                        if (in_array($key, ['network__id', 'createTimestamp', 'update_timestamp', 'network__revisions'])) {
-                            continue;
-                        }
-                        if ($val == $entity->$key) {
-                            continue;
-                        }
-                        if ($key == "files") {
-                            $this->bootstrapFiles($entity, $val, $foreign_data, $origin_node);
-                            continue;
-                        } else if ($key == "metalists") {
-                            $this->bootstrapMetaLists($entity, $val, $foreign_data);
-                            continue;
-                        }
-                        if ($val && $entity->$key) {
-                            // se a informação local é mais nova que a informação que veio no request
-                            // @todo: o ideal é verificar no histórico de revisões a data que foi preenchida a info
-                            if ($agent_updated <= $foreign_updated) {
-                                $data[$key] = $val;
-                            }
-                        } else if($val) {
-                            $data[$key] = $val;
-                        }
+        $inputs = [
+            ["local" => $app->user->enabledAgents, "remote" => ($this->postData["agents"] ?? [])],
+            ["local" => $app->user->enabledSpaces, "remote" => ($this->postData["spaces"] ?? [])]
+        ];
+        foreach ($inputs as $input) {
+            foreach ($input["remote"] as $foreign_data) {
+                $linked = false;
+                foreach ($input["local"] as $entity) {
+                    if ($this->compareEntityData($entity, $foreign_data)) {
+                        $linked = true;
+                        $entity->{"network__{$origin_node->slug}_entity_id"} = $foreign_data["id"];
+                        $data = $this->mergeEntity($entity, $foreign_data, $origin_node);
+                        $this->writeEntityFields($entity, $data);
+                        $this->verifyAndUpdateNetworkId($entity, $foreign_data);
+                        $entity->save(true);
+                        $app->log->debug("LINKED: {$entity} => {$entity->network__id}");
                     }
-                    $this->writeEntityFields($entity, $data);
-
-                    $fdate = new DateTime($foreign_data['createTimestamp']['date']);
-                    if ($fdate < $entity->createTimestamp) {
-                        $new_network__id = $foreign_data['network__id'];
-                        $current_network__id = $entity->network__id;
-
-                        $entity->network__id = $new_network__id;
-
-                        $skip_node = $this->getRequestOriginNode();
-                        $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
-                            "entity" => $entity,
-                            "node" => $skip_node,
-                            "current_network__id" => $current_network__id,
-                            "new_network__id" => $new_network__id
-                        ]);
-                    }
-
-                    $entity->save(true);
-                    $app->log->debug("LINKED: {$entity} => {$entity->network__id}");
+                }
+                if (!$linked) {
+                    $this->plugin->createEntity($entity->getClassName(), $foreign_data["network__id"], $foreign_data);
                 }
             }
-
-            if (!$linked) {
-                $this->plugin->createEntity($entity->getClassName(), $foreign_data['network__id'], $foreign_data);
-            }
         }
+        return;
     }
 
     function POST_updateEntityNetworkId()
@@ -1445,6 +1400,68 @@ class Node extends \MapasCulturais\Controller
         }
 
         return false;
+    }
+
+    /**
+     * Combina os dados recebidos com a entidade local, priorizando a mais atual.
+     * @param $entity A entidade local que deve receber os dados.
+     * @param $foreign_data Os dados recebidos de outro nó.
+     */
+    function mergeEntity(Entity $entity, array $foreign_data)
+    {
+        $origin_node = $this->getRequestOriginNode();
+        $entity_updated = $entity->updateTimestamp ?? $entity->createTimestamp;
+        $foreign_updated = new DateTime($foreign_data["updateTimestamp"]["date"] ?? $foreign_data["createTimestamp"]["date"]);
+        $data = [];
+        // faz merge das infos que vieram no request com a info do agente, mantendo a versão mais nova da info.
+        foreach ($foreign_data as $key => $val) {
+            if (in_array($key, ["network__id", "createTimestamp", "update_timestamp", "network__revisions"])) {
+                continue;
+            }
+            if ($val == $entity->$key) {
+                continue;
+            }
+            if ($key == "files") {
+                $this->bootstrapFiles($entity, $val, $foreign_data, $origin_node);
+                continue;
+            } else if ($key == "metalists") {
+                $this->bootstrapMetaLists($entity, $val, $foreign_data);
+                continue;
+            }
+            if ($val && $entity->$key) {
+                // se a informação local é mais nova que a informação que veio no request
+                // @todo: o ideal é verificar no histórico de revisões a data que foi preenchida a info
+                if ($entity_updated <= $foreign_updated) {
+                    $data[$key] = $val;
+                }
+            } else if ($val) {
+                $data[$key] = $val;
+            }
+        }
+        return $data;
+    }
+
+    /**
+     * Atualiza o network__id da entidade local se necessário para conclusão do merge.
+     * @param $entity A entidade local que está recebendo os dados.
+     * @param $foreign_data Os dados recebidos de outro nó.
+     */
+    function verifyAndUpdateNetworkId(\MapasCulturais\Entity $entity, array $foreign_data)
+    {
+        $fdate = new DateTime($foreign_data["createTimestamp"]["date"]);
+        if ($fdate < $entity->createTimestamp) {
+            $new_network__id = $foreign_data["network__id"];
+            $current_network__id = $entity->network__id;
+            $entity->network__id = $new_network__id;
+            $skip_node = $this->getRequestOriginNode();
+            App::i()->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
+                "entity" => $entity,
+                "node" => $skip_node,
+                "current_network__id" => $current_network__id,
+                "new_network__id" => $new_network__id
+            ]);
+        }
+        return;
     }
 
     /**
