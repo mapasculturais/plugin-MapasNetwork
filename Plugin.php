@@ -295,9 +295,9 @@ class Plugin extends \MapasCulturais\Plugin
             Plugin::saveMetadata($this->event, ["network__occurrence_ids", "network__occurrence_revisions"]);
             $nodes = Plugin::getEntityNodes($this->event);
             $is_descope = str_ends_with($_SERVER["REQUEST_URI"], "/descopedEventOccurrence");
-            $tracking_nodes = (array) $this->event->network__tracking_nodes;
             foreach ($nodes as $node) {
-                if (Plugin::checkNodeFilter($node, $this->space) || ($is_descope && isset($tracking_nodes[$node->slug]))) {
+                $meta_key = $node->entityMetadataKey;
+                if (Plugin::checkNodeFilter($node, $this->space) || ($is_descope && isset($this->event->$meta_key))) {
                     App::i()->enqueueJob(self::JOB_SLUG_DELETION, [
                         "syncAction" => $is_descope ? "descopedEventOccurrence" : "deletedEventOccurrence",
                         "entity" => $this->jsonSerialize(),
@@ -584,14 +584,6 @@ class Plugin extends \MapasCulturais\Plugin
             "label" => i::__("Data da próxima verificação por contas nos nodes", "mapas-network"),
             "type" => "DateTime"
         ]);
-        $network_tracking_metadata = [
-            "label" => i::__("Slugs dos nós que compartilham a entidade", "mapas-network"),
-            "type" => "json",
-            "default" => []
-        ];
-        $this->registerAgentMetadata("network__tracking_nodes", $network_tracking_metadata);
-        $this->registerEventMetadata("network__tracking_nodes", $network_tracking_metadata);
-        $this->registerSpaceMetadata("network__tracking_nodes", $network_tracking_metadata);
         // background jobs
         $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
         $app->registerJobType(new SyncEventJobType(self::JOB_SLUG_EVENT, $this));
@@ -837,25 +829,24 @@ class Plugin extends \MapasCulturais\Plugin
         $metadata_key = $this->entityMetadataKey;
         $entity->$metadata_key = $entity->id;
         $nodes = Plugin::getEntityNodes($entity);
-
         $destination_nodes = array_filter($nodes, function ($node) use ($entity) {
             $node_entity_metadata_key = $node->entityMetadataKey;
             // se a entidade já está vinculada, retorna true
-            if($entity->$node_entity_metadata_key ?? false) {
+            if ($entity->$node_entity_metadata_key ?? false) {
                 return true;
-            } else {
-                return Plugin::checkNodeFilter($node, $entity);
             }
+            return Plugin::checkNodeFilter($node, $entity);
         });
-        $tracking_nodes = (array) $entity->network__tracking_nodes ?? [];
+        $tracking_nodes = [];
         foreach ($nodes as $node) {
-            if (isset($tracking_nodes[$node->slug])) {
+            $meta_key = $node->entityMetadataKey;
+            if ($entity->$meta_key ?? false) {
                 $tracking_nodes[$node->slug] = $node;
             }
         }
         foreach ($destination_nodes as $node) {
             $app->enqueueJob(self::JOB_SLUG, [
-                "syncAction" => $action,
+                "syncAction" => isset($tracking_nodes[$node->slug]) ? $action : "createdEntity",
                 "entity" => $entity,
                 "node" => $node,
                 "nodeSlug" => $node->slug

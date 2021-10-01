@@ -33,22 +33,14 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
             'network__id' => $entity->network__id,
             'data' => $data,
         ];
-
         try {
             $app->log->info("SYNC: {$entity} -> {$node->url}");
             $node->api->apiPost("network-node/{$action}", $data, [], [CURLOPT_TIMEOUT => 30]);
-            $target = ($entity instanceof \MapasCulturais\Entities\EventOccurrence) ? $entity->event : $entity;
-            $nodes = (array) $target->network__tracking_nodes ?? [];
-            $nodes[$node->slug] = true;
-            $target->network__tracking_nodes = $nodes;
-            $this->plugin->skip($target, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
-            $target->save(true);
-            return true;
         } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
             $app->log->debug($e->getMessage());
-
             return false;
         }
+        return true;
     }
 
     /**

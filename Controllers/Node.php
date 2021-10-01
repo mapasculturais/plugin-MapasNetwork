@@ -902,10 +902,6 @@ class Node extends \MapasCulturais\Controller
         $data = $this->postData["data"];
         $network_id = $data["network__id"];
         $revision_id = end($data["network__revisions"]);
-        if (isset($data[$this->plugin->entityMetadataKey])) {
-            $this->json("ok");
-            return;
-        }
         if ($class_name !== EventOccurrence::class) {
             // @todo arrumar esse throw
             throw new PermissionDenied($app->user, $app->user, "update");
