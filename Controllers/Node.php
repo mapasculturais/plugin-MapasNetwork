@@ -378,55 +378,55 @@ class Node extends \MapasCulturais\Controller
     function POST_createdEntity()
     {
         $this->requireAuthentication();
-
         $app = App::i();
-
-        $node_slug = $this->postData['nodeSlug'];
-        $class_name = $this->postData['className'];
-        $network_id = $this->postData['network__id'];
-        $data = $this->postData['data'];
-
+        $node_slug = $this->postData["nodeSlug"];
+        $class_name = $this->postData["className"];
+        $network_id = $this->postData["network__id"];
+        $data = $this->postData["data"];
         if (isset($data[$this->plugin->entityMetadataKey])) {
-            $this->json('ok');
+            $this->json("ok");
             return;
         }
-
         $classes = [
             Agent::class,
             Space::class,
         ];
-
         if (!in_array($class_name, $classes)) {
             // @todo arrumar esse throw
-            throw new PermissionDenied($app->user, $app->user, 'create');
+            throw new PermissionDenied($app->user, $app->user, "create");
         }
-
+        $node = $this->getRequestOriginNode();
         // verifica se a entidade já existe para o usuário
-        $query = new ApiQuery($class_name, ['network__id' => "EQ({$network_id})", 'user' => "EQ({$app->user->id})"]);
-        if($ids = $query->findIds()) {
+        $query = new ApiQuery($class_name, ["network__id" => "EQ({$network_id})", "user" => "EQ({$app->user->id})"]);
+        if ($ids = $query->findIds()) {
             $id = $ids[0];
-
             /**
              * aproveita a requisição para atualizar o id da entidade no outro nó,
              * desta forma a propagação dos
              */
             $entity = $app->repo($class_name)->find($id);
-
-            $entity->{"network__{$node_slug}_entity_id"} = $data['id'];
-
+            $entity->{"network__{$node_slug}_entity_id"} = $data["id"];
             $entity->save(true);
-
             $app->log->debug("$network_id already exists with id {$id}");
             $this->json("$network_id already exists with id {$id}");
-
             return;
+        } else {
+            $enabled_list = ($class_name == Agent::class) ? $app->user->enabledAgents : $app->user->enabledSpaces;
+            foreach ($enabled_list as $local) {
+                if ($this->compareEntityData($local, $data)) {
+                    $local->{"network__{$node->slug}_entity_id"} = $data["id"];
+                    $data = $this->mergeEntity($local, $data, $node);
+                    $this->writeEntityFields($local, $data);
+                    $this->verifyAndUpdateNetworkId($local, $data);
+                    $local->save(true);
+                    $app->log->debug("LINKED: {$local} => {$local->network__id}");
+                    return;
+                }
+            }
         }
-
-        $node = $this->getRequestOriginNode();
-
         $data = $this->plugin->unserializeEntity($data, $node);
-
         $this->plugin->createEntity($class_name, $network_id, $data);
+        return;
     }
 
     function POST_createdEventOccurrence()
