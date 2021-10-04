@@ -880,7 +880,7 @@ class Plugin extends \MapasCulturais\Plugin
         // we don't use foreachEntityNodeDo here because filtering and looping have different references
         $nodes = Plugin::getEntityNodes($occurrence->event);
         foreach ($nodes as $node) {
-            if (Plugin::checkNodeFilter($node, $occurrence->space)) {
+            if (Plugin::checkNodeFilter($node, $event->owner) || Plugin::checkNodeFilter($node, $occurrence->space)) {
                 $app->enqueueJob(self::JOB_SLUG, [
                     "syncAction" => $action,
                     "entity" => $occurrence,
