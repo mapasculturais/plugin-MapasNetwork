@@ -457,6 +457,8 @@ class Node extends \MapasCulturais\Controller
              */
             $entity = $app->repo($class_name)->find($id);
             $entity->{$node->entityMetadataKey} = $data["id"];
+            $event->{$node->entityMetadataKey} = $data["event"]["id"];
+            $event->save(true);
             Plugin::sudo(function () use ($entity) {
                 $entity->save(true); // this is an existing, authorised occurrence, but without "sudo" it'll generate a request to save
                 return;
