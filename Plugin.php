@@ -187,20 +187,7 @@ class Plugin extends \MapasCulturais\Plugin
             if ($this->user->is("guest")) {
                 return;
             }
-            $nodes = Plugin::getCurrentUserNodes();
-            foreach ($nodes as $node) {
-                $config = [
-                    "label" => "Id da entidade no node {$node->slug}",
-                    "private" => true,
-                    "type" => "integer"
-                ];
-                // algo como network_spcultura_entity_id
-                $key = $node->entityMetadataKey;
-                $plugin->registerAgentMetadata($key, $config);
-                $plugin->registerEventMetadata($key, $config);
-                $plugin->registerSpaceMetadata($key, $config);
-                $plugin->registerMetadata(\MapasCulturais\Entities\EventOccurrence::class, $key, $config);
-            }
+            $plugin->registerEntityMetadataKeyForNodes(Plugin::getCurrentUserNodes());
             return;
         });
 
@@ -822,15 +809,34 @@ class Plugin extends \MapasCulturais\Plugin
     {
         $nodes = Plugin::getEntityNodes($entity->owner);
         foreach ($nodes as $node) {
-            if (Plugin::checkNodeFilter($node, $entity->owner) || isset($entity->{$node->entityMetadataKey})) {
+            if (Plugin::checkNodeFilter($node, $entity->owner) || ($entity->{$node->entityMetadataKey} ?? 0)) {
                 $cb($node, $entity);
             }
         }
     }
 
+    function registerEntityMetadataKeyForNodes(array $nodes)
+    {
+        foreach ($nodes as $node) {
+            $config = [
+                "label" => "Id da entidade no node {$node->slug}",
+                "private" => true,
+                "type" => "integer"
+            ];
+            // algo como network_spcultura_entity_id
+            $key = $node->entityMetadataKey;
+            $this->registerAgentMetadata($key, $config);
+            $this->registerEventMetadata($key, $config);
+            $this->registerSpaceMetadata($key, $config);
+            $this->registerMetadata(\MapasCulturais\Entities\EventOccurrence::class, $key, $config);
+        }
+        return;
+    }
+
     protected $skipList = [];
 
-    function skip($entity, $modes) {
+    function skip($entity, $modes)
+    {
         $this->skipList[(string) $entity] = $modes;
     }
 

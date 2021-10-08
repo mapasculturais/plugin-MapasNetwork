@@ -1447,7 +1447,7 @@ class Node extends \MapasCulturais\Controller
     }
 
     /**
-     * Atualiza o network__id da entidade local se necessário para conclusão do merge.
+     * Atualiza o network__id das entidades se necessário para conclusão do merge.
      * @param $entity A entidade local que está recebendo os dados.
      * @param $foreign_data Os dados recebidos de outro nó.
      */
@@ -1459,13 +1459,17 @@ class Node extends \MapasCulturais\Controller
             $current_network__id = $entity->network__id;
             $entity->network__id = $new_network__id;
             $skip_node = $this->getRequestOriginNode();
-            App::i()->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
-                "entity" => $entity,
-                "node" => $skip_node,
-                "current_network__id" => $current_network__id,
-                "new_network__id" => $new_network__id
-            ]);
+        } else { // with post-bootstrap comparing and linking of newly created entities, the local entity may be older
+            $new_network__id = $entity->network__id;
+            $current_network__id = $foreign_data["network__id"];
+            $skip_node = null;
         }
+        App::i()->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
+            "entity" => $entity,
+            "node" => $skip_node,
+            "current_network__id" => $current_network__id,
+            "new_network__id" => $new_network__id
+        ]);
         return;
     }
 
