@@ -833,6 +833,12 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
+    function POST_scopedEntity()
+    { // the name of the endpoint is used for decisions, do not unify these
+        $this->POST_createdEntity();
+        return;
+    }
+
     function POST_syncControl()
     {
         $this->requireAuthentication();

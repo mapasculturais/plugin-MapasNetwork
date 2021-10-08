@@ -31,6 +31,8 @@ use MapasSDK\MapasSDK;
  */
 class Plugin extends \MapasCulturais\Plugin
 {
+    const ACTION_SCOPED = "scopedEntity";
+
     const JOB_SLUG = "network__sync_entity";
     const JOB_SLUG_DELETION = "network__sync_entity_deletion";
     const JOB_SLUG_DOWNLOADS = "network__sync_download_files";
@@ -855,7 +857,7 @@ class Plugin extends \MapasCulturais\Plugin
         }
         foreach ($destination_nodes as $node) {
             $app->enqueueJob(self::JOB_SLUG, [
-                "syncAction" => isset($tracking_nodes[$node->slug]) ? $action : "createdEntity",
+                "syncAction" => isset($tracking_nodes[$node->slug]) ? $action : self::ACTION_SCOPED,
                 "entity" => $entity,
                 "node" => $node,
                 "nodeSlug" => $node->slug
