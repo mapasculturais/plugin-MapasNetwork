@@ -811,7 +811,7 @@ class Plugin extends \MapasCulturais\Plugin
     {
         $nodes = Plugin::getEntityNodes($entity->owner);
         foreach ($nodes as $node) {
-            if (Plugin::checkNodeFilter($node, $entity->owner)) {
+            if (Plugin::checkNodeFilter($node, $entity->owner) || isset($entity->{$node->entityMetadataKey})) {
                 $cb($node, $entity);
             }
         }
