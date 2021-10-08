@@ -197,6 +197,7 @@ class Plugin extends \MapasCulturais\Plugin
                 $plugin->registerAgentMetadata($key, $config);
                 $plugin->registerEventMetadata($key, $config);
                 $plugin->registerSpaceMetadata($key, $config);
+                $plugin->registerMetadata(\MapasCulturais\Entities\EventOccurrence::class, $key, $config);
             }
             return;
         });
