@@ -37,12 +37,8 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         $map_ids = function ($entity) { return $entity->id; };
         $map_serialize = function ($entity) use ($file_groups, $metalist_groups) {
             $serialised = $this->plugin->serializeEntity($entity);
-            $serialised["files"] = array_filter($this->plugin->serializeEntity($entity->files), function ($key) use ($entity, $file_groups) {
-                return in_array(((string) $key), $file_groups[$entity->className]);
-            }, ARRAY_FILTER_USE_KEY);
-            $serialised["metalists"] = array_filter($this->plugin->serializeEntity($entity->metalists), function ($key) use ($entity, $metalist_groups) {
-                return in_array(((string) $key), $metalist_groups[$entity->className]);
-            }, ARRAY_FILTER_USE_KEY);
+            $serialised = $this->plugin->serializeAttachments($entity, "files", $file_groups, $serialised);
+            $serialised = $this->plugin->serializeAttachments($entity, "metalists", $metalist_groups, $serialised);
             return $serialised;
         };
 

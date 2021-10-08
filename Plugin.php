@@ -718,6 +718,14 @@ class Plugin extends \MapasCulturais\Plugin
         return $value;
     }
 
+    function serializeAttachments(Entity $entity, string $key, array $groups, array $serialised)
+    {
+        $serialised[$key] = array_filter($this->serializeEntity($entity->$key), function ($att_key) use ($entity, $groups) {
+            return in_array(((string) $att_key), $groups[$entity->className]);
+        }, ARRAY_FILTER_USE_KEY);
+        return $serialised;
+    }
+
     /**
      *
      * @param mixed $value
