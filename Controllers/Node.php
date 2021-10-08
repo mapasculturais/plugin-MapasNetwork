@@ -405,7 +405,7 @@ class Node extends \MapasCulturais\Controller
              * desta forma a propagação dos
              */
             $entity = $app->repo($class_name)->find($id);
-            $entity->{"network__{$node_slug}_entity_id"} = $data["id"];
+            $entity->{$node->entityMetadataKey} = $data["id"];
             $entity->save(true);
             $app->log->debug("$network_id already exists with id {$id}");
             $this->json("$network_id already exists with id {$id}");
@@ -414,10 +414,11 @@ class Node extends \MapasCulturais\Controller
             $enabled_list = ($class_name == Agent::class) ? $app->user->enabledAgents : $app->user->enabledSpaces;
             foreach ($enabled_list as $local) {
                 if ($this->compareEntityData($local, $data)) {
-                    $local->{"network__{$node->slug}_entity_id"} = $data["id"];
+                    $original_data = $data;
                     $data = $this->mergeEntity($local, $data, $node);
                     $this->writeEntityFields($local, $data);
-                    $this->verifyAndUpdateNetworkId($local, $data);
+                    $local->{$node->entityMetadataKey} = $original_data["id"];
+                    $this->verifyAndUpdateNetworkId($local, $original_data);
                     $local->save(true);
                     $app->log->debug("LINKED: {$local} => {$local->network__id}");
                     return;
@@ -433,10 +434,10 @@ class Node extends \MapasCulturais\Controller
     {
         $this->requireAuthentication();
         $app = App::i();
-        $node_slug = $this->postData["nodeSlug"];
         $class_name = $this->postData["className"];
         $data = $this->postData["data"];
         $network_id = $data["network__id"];
+        $node = $this->getRequestOriginNode();
         $app->log->debug("createdEventOccurrence: $network_id");
         if (isset($data[$this->plugin->entityMetadataKey])) {
             $this->json("ok");
@@ -455,7 +456,7 @@ class Node extends \MapasCulturais\Controller
              * desta forma a propagação dos
              */
             $entity = $app->repo($class_name)->find($id);
-            $entity->{"network__{$node_slug}_entity_id"} = $data["id"];
+            $entity->{$node->entityMetadataKey} = $data["id"];
             Plugin::sudo(function () use ($entity) {
                 $entity->save(true); // this is an existing, authorised occurrence, but without "sudo" it'll generate a request to save
                 return;
@@ -466,7 +467,6 @@ class Node extends \MapasCulturais\Controller
         }
         // unlike event, space comes as embedded data, so we still need to look for the entity
         $space = $this->plugin->unserializeEntity($data["space"]);
-        $node = $this->getRequestOriginNode();
         $space_entity = $this->plugin->getEntityByNetworkId($space["network__id"]);
         if (!$space_entity) {
             if (!$space["owner"]) {
@@ -480,8 +480,9 @@ class Node extends \MapasCulturais\Controller
             }
             $plugin = $this->plugin;
             // the space's owner isn't necessarily the event's owner so this must be sudone
-            Plugin::sudo(function () use ($plugin, $space) {
+            Plugin::sudo(function () use ($node, $plugin, $space) {
                 $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space);
+                $space_entity->{$node->entityMetadataKey} = $space["id"];
                 $space_entity->save(true);
                 return;
             });
@@ -1065,7 +1066,7 @@ class Node extends \MapasCulturais\Controller
                 foreach ($input["local"] as $entity) {
                     if ($this->compareEntityData($entity, $foreign_data)) {
                         $linked = true;
-                        $entity->{"network__{$origin_node->slug}_entity_id"} = $foreign_data["id"];
+                        $entity->{$origin_node->entityMetadataKey} = $foreign_data["id"];
                         $data = $this->mergeEntity($entity, $foreign_data, $origin_node);
                         $this->writeEntityFields($entity, $data);
                         $this->verifyAndUpdateNetworkId($entity, $foreign_data);
