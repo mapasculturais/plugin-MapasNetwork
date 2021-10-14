@@ -31,6 +31,7 @@ use MapasSDK\MapasSDK;
  */
 class Plugin extends \MapasCulturais\Plugin
 {
+    const ACTION_RESYNC = "resyncEntity";
     const ACTION_SCOPED = "scopedEntity";
 
     const JOB_SLUG = "network__sync_entity";

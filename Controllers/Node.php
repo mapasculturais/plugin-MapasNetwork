@@ -408,7 +408,7 @@ class Node extends \MapasCulturais\Controller
             $app->log->debug("$network_id already exists with id {$id}");
             $this->json("$network_id already exists with id {$id}");
             return;
-        } else {
+        } else { // tries to locate the entity among existing entities to link
             $enabled_list = ($class_name == Agent::class) ? $app->user->enabledAgents : $app->user->enabledSpaces;
             foreach ($enabled_list as $local) {
                 if ($this->compareEntityData($local, $data)) {
@@ -417,14 +417,32 @@ class Node extends \MapasCulturais\Controller
                     $this->writeEntityFields($local, $data);
                     $local->{$node->entityMetadataKey} = $original_data["id"];
                     $this->verifyAndUpdateNetworkId($local, $original_data);
+                    if (($local->usesFiles() && !empty($local->getFiles())) ||
+                        ($local->usesMetaLists() && !empty($local->getMetaLists()))) {
+                        App::i()->enqueueJob(Plugin::JOB_SLUG, [
+                            "syncAction" => Plugin::ACTION_RESYNC,
+                            "entity" => $local,
+                            "node" => $node,
+                            "nodeSlug" => $node->slug
+                        ]);
+                    }
                     $local->save(true);
                     $app->log->debug("LINKED: {$local} => {$local->network__id}");
                     return;
                 }
             }
         }
+        // entity not found, could be either an actual create or a scoped, in which case files and metalists must be handled
+        $files = $data["files"] ?? null;
+        $metalists = $data["metalists"] ?? null;
         $data = $this->plugin->unserializeEntity($data, $node);
-        $this->plugin->createEntity($class_name, $network_id, $data);
+        $entity = $this->plugin->createEntity($class_name, $network_id, $data);
+        if ($files) {
+            $this->bootstrapFiles($entity, $files, $data, $node);
+        }
+        if ($metalists) {
+            $this->bootstrapMetaLists($entity, $metalists, $data, $node);
+        }
         return;
     }
 
@@ -863,15 +881,11 @@ class Node extends \MapasCulturais\Controller
     function POST_updatedEntity()
     {
         $this->requireAuthentication();
-
         $app = App::i();
-
-        $class_name = $this->postData['className'];
-        $network_id = $this->postData['network__id'];
-        $data = $this->postData['data'];
-
-        $revision_id = end($data['network__revisions']);
-
+        $class_name = $this->postData["className"];
+        $network_id = $this->postData["network__id"];
+        $data = $this->postData["data"];
+        $revision_id = end($data["network__revisions"]);
         $classes = [
             Agent::class,
             Event::class,
@@ -879,15 +893,21 @@ class Node extends \MapasCulturais\Controller
         ];
         if (!in_array($class_name, $classes)) {
             // @todo arrumar esse throw
-            throw new PermissionDenied($app->user, $app->user, 'update');
+            throw new PermissionDenied($app->user, $app->user, "update");
         }
-
         // verifica se a entidade já existe para o usuário
-        $query = new ApiQuery($class_name, ['network__id' => "EQ({$network_id})", 'user' => "EQ({$app->user->id})"]);
+        $query = new ApiQuery($class_name, ["network__id" => "EQ({$network_id})", "user" => "EQ({$app->user->id})"]);
         if ($ids = $query->findIds()) {
             $id = $ids[0];
-
             $entity = $app->repo($class_name)->find($id);
+            $node = $this->getRequestOriginNode();
+            if (isset($data["files"])) {
+                $this->bootstrapFiles($entity, $data["files"], $data, $node);
+            }
+            if (isset($data["metalists"])) {
+                $this->bootstrapMetaLists($entity, $data["metalists"], $data, $node);
+            }
+            $metakey = $node->entityMetadataKey;
             $entity->network__revisions = $entity->network__revisions ?? [];
             if (in_array($revision_id, $entity->network__revisions)) {
                 $this->json("$network_id $revision_id already exists");
@@ -899,7 +919,6 @@ class Node extends \MapasCulturais\Controller
                 }
                 return;
             }
-
             $revisions = $entity->network__revisions;
             $revisions[] = $revision_id;
             $entity->$metakey = $data["id"];
@@ -1090,6 +1109,12 @@ class Node extends \MapasCulturais\Controller
                 }
             }
         }
+        return;
+    }
+
+    function POST_resyncEntity()
+    { // the name of the endpoint is used for decisions, do not unify
+        $this->POST_updatedEntity();
         return;
     }
 

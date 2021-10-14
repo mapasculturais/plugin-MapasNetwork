@@ -24,14 +24,19 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
         $action = $job->syncAction;
         $entity = $job->entity;
         $node = $job->node;
-
+        $class_name = $entity->getClassName();
         $data = $this->plugin->serializeEntity($entity);
-
+        if (in_array($action, [Plugin::ACTION_RESYNC, Plugin::ACTION_SCOPED])) {
+            $groups = array_keys($app->getRegisteredFileGroupsByEntity($class_name));
+            $data = $this->plugin->serializeAttachments($entity, "files", $groups, $data);
+            $groups = array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity($class_name)), $this->plugin->allowedMetaListGroups);
+            $data = $this->plugin->serializeAttachments($entity, "metalists", $groups, $data);
+        }
         $data = [
-            'nodeSlug' => $this->plugin->nodeSlug,
-            'className' => $entity->getClassName(),
-            'network__id' => $entity->network__id,
-            'data' => $data,
+            "nodeSlug" => $this->plugin->nodeSlug,
+            "className" => $class_name,
+            "network__id" => $entity->network__id,
+            "data" => $data,
         ];
         try {
             $app->log->info("SYNC: {$entity} -> {$node->url}");
