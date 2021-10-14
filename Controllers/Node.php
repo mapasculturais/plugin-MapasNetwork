@@ -1206,26 +1206,13 @@ class Node extends \MapasCulturais\Controller
             }
             $revision_key = "network__revisions_files_$group";
             $network_ids_key = "network__ids_files_$group";
+            $revisions = $entity->$revision_key ?? [];
+            $revisions[] = end($foreign_entity[$revision_key]);
+            $entity->$revision_key = $revisions;
             if (isset($group_data["id"])) {
-                $revisions = $entity->$revision_key ?? [];
-                $revisions[] = end($foreign_entity[$revision_key]);
-                $entity->$revision_key = $revisions;
                 $network_id = array_keys($foreign_entity[$network_ids_key])[0];
-                $entity->$network_ids_key = [$network_id => Plugin::UNKNOWN_ID];
-                $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
-                    "node" => $node,
-                    "user" => $app->user->id,
-                    "networkID" => $network_id,
-                    "className" => $entity->fileClassName,
-                    "ownerClassName" => $entity->className,
-                    "ownerNetworkID" => $entity->network__id,
-                    "ownerSourceNetworkID" => $foreign_entity["network__id"],
-                    "data" => $group_data
-                ]);
+                $this->enqueueResyncDownload($node, $entity, $network_ids_key, $network_id, $foreign_entity, $group_data);
             } else {
-                $revisions = $entity->$revision_key ?? [];
-                $revisions[] = end($foreign_entity[$revision_key]);
-                $entity->$revision_key = $revisions;
                 foreach ($group_data as $file) {
                     if (count(array_filter(($entity->files[$group] ?? []), function ($item) use ($file) {
                         return ($item->md5 == $file["md5"]);
@@ -1233,17 +1220,7 @@ class Node extends \MapasCulturais\Controller
                         continue;
                     }
                     $network_id = array_search($file["id"], $foreign_entity[$network_ids_key]);
-                    $entity->$network_ids_key = [$network_id => Plugin::UNKNOWN_ID];
-                    $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
-                        "node" => $node,
-                        "user" => $app->user->id,
-                        "networkID" => $network_id,
-                        "className" => $entity->fileClassName,
-                        "ownerClassName" => $entity->className,
-                        "ownerNetworkID" => $entity->network__id,
-                        "ownerSourceNetworkID" => $foreign_entity["network__id"],
-                        "data" => $file
-                    ]);
+                    $this->enqueueResyncDownload($node, $entity, $network_ids_key, $network_id, $foreign_entity, $file);
                 }
             }
         }
@@ -1414,6 +1391,35 @@ class Node extends \MapasCulturais\Controller
         }
 
         return false;
+    }
+
+    /**
+     * Enfileira o download de um arquivo em um processo de ressincronização.
+     * @param $node O nó de origem do arquivo.
+     * @param $entity A entidade que dever receber o arquivo.
+     * @param $network_ids_key A chave com os network__id dos arquivos do grupo.
+     * @param $network_id O network__id do arquivo.
+     * @param $owner_data Os dados recebidos sobre o proprietário do arquivo.
+     * @param $data Os dados recebidos sobre o arquivo.
+     */
+    function enqueueResyncDownload(EntitiesNode $node, Entity $entity, string $network_ids_key,
+                                   string $network_id, array $owner_data, array $data)
+    {
+        $app = App::i();
+        $network_ids = isset($entity->$network_ids_key) ? (array) $entity->$network_ids_key : [];
+        $network_ids[$network_id] = Plugin::UNKNOWN_ID;
+        $entity->$network_ids_key = $network_ids;
+        $app->enqueueJob(Plugin::JOB_SLUG_DOWNLOADS, [
+            "node" => $node,
+            "user" => $app->user->id,
+            "networkID" => $network_id,
+            "className" => $entity->fileClassName,
+            "ownerClassName" => $entity->className,
+            "ownerNetworkID" => $entity->network__id,
+            "ownerSourceNetworkID" => $owner_data["network__id"],
+            "data" => $data
+        ]);
+        return;
     }
 
     /**
