@@ -49,6 +49,7 @@ class Plugin extends \MapasCulturais\Plugin
     const SYNC_ON = 0;
     const SYNC_OFF = 1;
     const SYNC_AUTO_OFF = 2;
+    const SYNC_DELETED = 3;
 
     const UNKNOWN_ID = -1;
 
@@ -108,7 +109,8 @@ class Plugin extends \MapasCulturais\Plugin
         $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
             /** @var MapasCulturais\Theme $this */
             $entity = $this->controller->requestedEntity;
-            if ($app->user->id == $entity->ownerUser->id) {
+            if (($app->user->id == $entity->ownerUser->id) &&
+                (($entity->network__sync_control ?? self::SYNC_ON) != self::SYNC_DELETED)) {
                 $app->view->jsObject["entity"]["syncControl"] = !!($entity->network__sync_control ?? self::SYNC_ON);
                 $app->view->jsObject["entity"]["networkId"] = $entity->network__id;
                 $app->view->jsObject["gettext"]["pluginMapasNetwork"] = [
@@ -230,6 +232,16 @@ class Plugin extends \MapasCulturais\Plugin
                 return;
             }
             $plugin->syncEntity($this, "updatedEntity");
+            return;
+        });
+        $app->hook("$entities_hook_prefix_all.undelete:after", function () use ($plugin) {
+            /** @var \MapasCulturais\Entity $this */
+            if (($this->network__sync_control ?? self::SYNC_ON) == self::SYNC_DELETED) {
+                $this->network__sync_control = self::SYNC_AUTO_OFF;
+                Plugin::notifySyncControlOff($this);
+                $plugin->skip($this, [self::SKIP_BEFORE, self::SKIP_AFTER]);
+                $this->save(true);
+            }
             return;
         });
         $app->hook("entity(<<agent|event|space>>).meta(network__sync_control).update:after", function () use ($plugin) {
@@ -1080,6 +1092,9 @@ class Plugin extends \MapasCulturais\Plugin
                 continue;
             }
             if (is_null($val) && in_array($key, $skip_null_fields)) {
+                continue;
+            }
+            if (($key == "status") && (($entity->network__sync_control ?? self::SYNC_ON) == self::SYNC_DELETED)) {
                 continue;
             }
             if (($entity instanceof \MapasCulturais\Entities\EventOccurrence)) {
