@@ -1039,7 +1039,7 @@ class Plugin extends \MapasCulturais\Plugin
         return;
     }
 
-    function shouldSkip(\MapasCulturais\Entity $entity, $skip_type)
+    function shouldSkip(Entity $entity, $skip_type)
     {
         if (in_array($skip_type, ($this->skipList[(string) $entity] ?? []))) {
             return true;
@@ -1053,12 +1053,7 @@ class Plugin extends \MapasCulturais\Plugin
             $revisions[] = "{$entity->networkRevisionPrefix}:{$uid}";
             $entity->network__revisions = $revisions;
             $entity->network__sync_control = self::SYNC_AUTO_OFF;
-            // notifies user that synchronisation is disabled
-            $notification = new \MapasCulturais\Entities\Notification;
-            $notification->user = $entity->ownerUser;
-            $message = i::__("A sincronização para %s foi automaticamente desabilitada. Visite a página para reabilitar.", "mapas-network");
-            $notification->message = sprintf($message, "<a href=\"{$entity->singleUrl}\" >{$entity->name}</a>");
-            $notification->save(true);
+            Plugin::notifySyncControlOff($entity);
             return true;
         }
         return false;
@@ -1112,6 +1107,21 @@ class Plugin extends \MapasCulturais\Plugin
             }
             $entity->$key = $val;
         }
+        return;
+    }
+
+    /**
+     * Envia para o dono da entidade uma notificação avisando que a sincronização
+     * foi automaticamente desligada.
+     * @param $entity A entidade cuja sincronização foi desligada.
+     */
+    static function notifySyncControlOff(Entity $entity)
+    {
+        $notification = new \MapasCulturais\Entities\Notification;
+        $notification->user = $entity->ownerUser;
+        $message = i::__("A sincronização para %s foi automaticamente desabilitada. Visite a página para reabilitar.", "mapas-network");
+        $notification->message = sprintf($message, "<a href=\"{$entity->singleUrl}\" >{$entity->name}</a>");
+        $notification->save(true);
         return;
     }
 
