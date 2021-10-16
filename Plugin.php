@@ -87,23 +87,27 @@ class Plugin extends \MapasCulturais\Plugin
             return;
         });
         $app->hook("GET(network-node.<<*>>):before", function () use ($app) {
-            $app->view->enqueueScript("app", "ng.mc.module.notifications",
-                                      "js/ng.mc.module.notifications.js");
-            $app->view->enqueueScript("app", "ng.mc.directive.editBox",
-                                      "js/ng.mc.directive.editBox.js");
-            $app->view->enqueueScript("app", "ng.mapas-network",
-                                      "js/ng.mapas-network.js",
-                                      ["mapasculturais"]);
-            $app->view->enqueueScript("app", "mapas-network",
-                                      "js/mapas-network.js",
-                                      ["mapasculturais"]);
-            $app->view->enqueueStyle("app", "mapas-network",
-                                      "css/mapas-network.css");
+            $app->view->enqueueScript("app", "ng.mc.module.notifications", "js/ng.mc.module.notifications.js");
+            $app->view->enqueueScript("app", "ng.mc.directive.editBox", "js/ng.mc.directive.editBox.js");
+            $app->view->enqueueScript("app", "ng.mapas-network", "js/ng.mapas-network.js", ["mapasculturais"]);
+            $app->view->enqueueScript("app", "mapas-network", "js/mapas-network.js", ["mapasculturais"]);
+            $app->view->enqueueStyle("app", "mapas-network", "css/mapas-network.css");
+            return;
+        });
+        $app->hook("GET(panel.<<agents|events|spaces>>):before", function () use ($app) {
+            $app->view->enqueueScript("app", "mapas-network", "js/mapas-network.js", ["mapasculturais"]);
+            $app->view->localizeScript("pluginMapasNetwork", [
+                "confirmDeletionPropagation" => i::__("Deseja remover a entidade nos demais Mapas da rede?", "mapas-network"),
+            ]);
+            return;
+        });
+        $app->hook("template(panel.<<agents|events|spaces>>.panel-new-fields-before):begin", function ($entity) {
+            /** @var MapasCulturais\Theme $this */
+            $this->part("network-node/mapas-network-entity-data.php", ["entity" => $entity]);
             return;
         });
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
-            $app->view->enqueueStyle("app", "mapas-network",
-                                     "css/mapas-network.css");
+            $app->view->enqueueStyle("app", "mapas-network", "css/mapas-network.css");
             return;
         });
         $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
