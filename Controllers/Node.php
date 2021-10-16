@@ -3,7 +3,6 @@
 namespace MapasNetwork\Controllers;
 
 use DateTime;
-use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entity;
 use MapasCulturais\Entities\UserApp;
@@ -395,9 +394,7 @@ class Node extends \MapasCulturais\Controller
         }
         $node = $this->getRequestOriginNode();
         // verifica se a entidade já existe para o usuário
-        $query = new ApiQuery($class_name, ["network__id" => "EQ({$network_id})", "user" => "EQ({$app->user->id})"]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($class_name, $network_id)) {
             /**
              * aproveita a requisição para atualizar o id da entidade no outro nó,
              * desta forma a propagação dos
@@ -556,12 +553,7 @@ class Node extends \MapasCulturais\Controller
                                        "create file");
         }
         // obtain the owner entity
-        $query = new ApiQuery($owner_class, [
-            "network__id" => "EQ({$owner_network_id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($owner_class, $owner_network_id)) {
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
@@ -621,12 +613,7 @@ class Node extends \MapasCulturais\Controller
                                        "create metalist");
         }
         // obtain the owner entity
-        $query = new ApiQuery($owner_class, [
-            "network__id" => "EQ({$owner_network_id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($owner_class, $owner_network_id)) {
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
@@ -675,12 +662,7 @@ class Node extends \MapasCulturais\Controller
         $event_network_id = $this->postData["ownerNetworkID"];
         $network_id = $this->postData["network__id"];
         // obtain the owner entity
-        $query = new ApiQuery($event_class, [
-            "network__id" => "EQ({$event_network_id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($event_class, $event_network_id)) {
             $event = $app->repo($event_class)->find($id);
             $event->network__occurrence_ids = $event->network__occurrence_ids ?? [];
             // delete the item
@@ -710,8 +692,6 @@ class Node extends \MapasCulturais\Controller
         $app = App::i();
         $entity_class = $this->postData["className"];
         $network_id = $this->postData["network__id"];
-        $revisions = $this->postData["network__revisions"];
-        $revision_id = isset($revisions) ? end($revisions) : null;
         $classes = [
             Agent::class,
             Event::class,
@@ -723,12 +703,7 @@ class Node extends \MapasCulturais\Controller
                                        "delete entity");
         }
         // obtain the entity
-        $query = new ApiQuery($entity_class, [
-            "network__id" => "EQ({$network_id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($entity_class, $network_id)) {
             $entity = $app->repo($entity_class)->find($id);
             $entity->delete(true);
         }
@@ -764,12 +739,7 @@ class Node extends \MapasCulturais\Controller
                                        "delete file");
         }
         // obtain the owner entity
-        $query = new ApiQuery($owner_class, [
-            "network__id" => "EQ({$owner_network_id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($owner_class, $owner_network_id)) {
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
@@ -825,12 +795,7 @@ class Node extends \MapasCulturais\Controller
                                        "delete metalist");
         }
         // obtain the owner entity
-        $query = new ApiQuery($owner_class, [
-            "network__id" => "EQ({$owner_network_id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($owner_class, $owner_network_id)) {
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
@@ -896,9 +861,7 @@ class Node extends \MapasCulturais\Controller
             throw new PermissionDenied($app->user, $app->user, "update");
         }
         // verifica se a entidade já existe para o usuário
-        $query = new ApiQuery($class_name, ["network__id" => "EQ({$network_id})", "user" => "EQ({$app->user->id})"]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($class_name, $network_id)) {
             $entity = $app->repo($class_name)->find($id);
             $node = $this->getRequestOriginNode();
             if (isset($data["files"])) {
@@ -1014,12 +977,7 @@ class Node extends \MapasCulturais\Controller
                                        "update metalist");
         }
         // obtain the owner entity
-        $query = new ApiQuery($owner_class, [
-            "network__id" => "EQ({$owner_network_id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findentityId($owner_class, $owner_network_id)) {
             $owner = $app->repo($owner_class)->find($id);
             $owner->$revision_key = $owner->$revision_key ?? [];
             $owner->$network_ids_key = $owner->$network_ids_key ?? [];
@@ -1121,34 +1079,22 @@ class Node extends \MapasCulturais\Controller
     function POST_updateEntityNetworkId()
     {
         $this->requireAuthentication();
-
         $app = App::i();
-
-        $class_name = $this->data['className'];
-        $current_network__id = $this->data['current_network__id'];
-        $new_network__id = $this->data['new_network__id'];
-
+        $class_name = $this->data["className"];
+        $current_network__id = $this->data["current_network__id"];
+        $new_network__id = $this->data["new_network__id"];
         if ($current_network__id == $new_network__id) {
-            $this->errorJson('current_network__id and new_network__id are the same', 400);
+            $this->errorJson("current_network__id and new_network__id are the same", 400);
         }
-
         $classes = [
             Agent::class,
             Space::class,
         ];
-
         if (!in_array($class_name, $classes)) {
             // @todo arrumar esse throw
-            throw new PermissionDenied($app->user, $app->user, 'update');
+            throw new PermissionDenied($app->user, $app->user, "update");
         }
-
-        $query = new ApiQuery($class_name, [
-            "network__id" => "EQ({$current_network__id})",
-            "user" => "EQ({$app->user->id})"
-        ]);
-
-        if ($ids = $query->findIds()) {
-            $id = $ids[0];
+        if ($id = $this->findEntityId($class_name, $current_network__id)) {
             $entity = $app->repo($class_name)->find($id);
             $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
             $entity->network__id = $new_network__id;
@@ -1445,6 +1391,23 @@ class Node extends \MapasCulturais\Controller
             "data" => $data
         ]);
         return;
+    }
+
+    /**
+     * Encontra o id local da entidade com o network__id fornecido.
+     * @param $class_name A classe da entidade buscada.
+     * @param $network_id O network__id da entidade buscada.
+     * @return int O id local da entidade, ou zero se não encontrada.
+     */
+    function findEntityId(string $class_name, string $network_id): int
+    {
+        $app = App::i();
+        $query = new \MapasNetwork\AllSeeingApiQuery($class_name, [
+            "network__id" => "EQ($network_id)",
+            "user" => "EQ({$app->user->id})"
+        ]);
+        $ids = $query->findIds();
+        return ($ids[0] ?? 0);
     }
 
     /**
