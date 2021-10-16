@@ -158,7 +158,6 @@ class Node extends \MapasCulturais\Controller
         return $token;
     }
 
-
     function checkTokenSecret($token, $secret, $verify_user = false) {
         $app = App::i();
 
@@ -379,7 +378,6 @@ class Node extends \MapasCulturais\Controller
     {
         $this->requireAuthentication();
         $app = App::i();
-        $node_slug = $this->postData["nodeSlug"];
         $class_name = $this->postData["className"];
         $network_id = $this->postData["network__id"];
         $data = $this->postData["data"];
@@ -531,6 +529,7 @@ class Node extends \MapasCulturais\Controller
         $revision_id = isset($revisions) ? end($revisions) : null;
         $classes = [
             Agent::class,
+            Event::class,
             Space::class,
         ];
         if (!in_array($owner_class, $classes)) {
@@ -595,6 +594,7 @@ class Node extends \MapasCulturais\Controller
         $revision_id = isset($revisions) ? end($revisions) : null;
         $classes = [
             Agent::class,
+            Event::class,
             Space::class,
         ];
         if (!in_array($owner_class, $classes)) {
@@ -696,6 +696,7 @@ class Node extends \MapasCulturais\Controller
         $revision_id = isset($revisions) ? end($revisions) : null;
         $classes = [
             Agent::class,
+            Event::class,
             Space::class,
         ];
         if (!in_array($entity_class, $classes)) {
@@ -736,6 +737,7 @@ class Node extends \MapasCulturais\Controller
         $revision_id = isset($revisions) ? end($revisions) : null;
         $classes = [
             Agent::class,
+            Event::class,
             Space::class,
         ];
         if (!in_array($owner_class, $classes)) {
@@ -796,6 +798,7 @@ class Node extends \MapasCulturais\Controller
         $revision_id = isset($revisions) ? end($revisions) : null;
         $classes = [
             Agent::class,
+            Event::class,
             Space::class,
         ];
         if (!in_array($owner_class, $classes)) {
@@ -837,7 +840,7 @@ class Node extends \MapasCulturais\Controller
     }
 
     function POST_scopedEntity()
-    { // the name of the endpoint is used for decisions, do not unify these
+    { // the name of the endpoint is used for decisions, do not unify
         $this->POST_createdEntity();
         return;
     }
@@ -871,6 +874,7 @@ class Node extends \MapasCulturais\Controller
 
         $classes = [
             Agent::class,
+            Event::class,
             Space::class,
         ];
         if (!in_array($class_name, $classes)) {
@@ -885,17 +889,21 @@ class Node extends \MapasCulturais\Controller
 
             $entity = $app->repo($class_name)->find($id);
             $entity->network__revisions = $entity->network__revisions ?? [];
-
-            if (in_array($revision_id, $entity->network__revisions)){
+            if (in_array($revision_id, $entity->network__revisions)) {
                 $this->json("$network_id $revision_id already exists");
+                if (!($entity->$metakey ?? null)) {
+                    $app->log->debug("Saving $metakey for node {$node->slug}.");
+                    $entity->$metakey = $data["id"];
+                    $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
+                    $entity->save(true);
+                }
                 return;
             }
 
             $revisions = $entity->network__revisions;
             $revisions[] = $revision_id;
-
+            $entity->$metakey = $data["id"];
             $entity->network__revisions = $revisions;
-
             $this->writeEntityFields($entity, $data);
             $this->plugin->skip($entity, [Plugin::SKIP_BEFORE]);
             $entity->save(true);
@@ -978,6 +986,7 @@ class Node extends \MapasCulturais\Controller
         $revision_id = isset($revisions) ? end($revisions) : null;
         $classes = [
             Agent::class,
+            Event::class,
             Space::class,
         ];
         if (!in_array($owner_class, $classes)) {
@@ -1420,7 +1429,7 @@ class Node extends \MapasCulturais\Controller
         $data = [];
         // faz merge das infos que vieram no request com a info do agente, mantendo a versão mais nova da info.
         foreach ($foreign_data as $key => $val) {
-            if (in_array($key, ["network__id", "createTimestamp", "update_timestamp", "network__revisions"])) {
+            if (in_array($key, ["network__id", "createTimestamp", "updateTimestamp", "network__revisions"])) {
                 continue;
             }
             if ($val == $entity->$key) {
