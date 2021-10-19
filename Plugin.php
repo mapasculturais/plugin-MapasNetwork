@@ -95,6 +95,9 @@ class Plugin extends \MapasCulturais\Plugin
             return;
         });
         $app->hook("GET(panel.<<agents|events|spaces>>):before", function () use ($app) {
+            if (empty(self::getCurrentUserNodes())) {
+                return;
+            }
             $app->view->enqueueScript("app", "mapas-network", "js/mapas-network.js", ["mapasculturais"]);
             $app->view->localizeScript("pluginMapasNetwork", [
                 "confirmDeletionPropagation" => i::__("Deseja remover a entidade nos demais Mapas da rede?", "mapas-network"),
@@ -103,6 +106,9 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("template(panel.<<agents|events|spaces>>.panel-new-fields-before):begin", function ($entity) {
             /** @var MapasCulturais\Theme $this */
+            if (empty(self::getCurrentUserNodes())) {
+                return;
+            }
             $this->part("network-node/mapas-network-entity-data.php", ["entity" => $entity]);
             return;
         });
@@ -127,7 +133,7 @@ class Plugin extends \MapasCulturais\Plugin
             return;
         });
         $app->hook("view.includeAngularEntityAssets:after", function () use ($app) {
-            $app->view->enqueueScript("app", "mapas-network", "js/ng.mapas-network.js", [/*"mapasculturais"*/]);
+            $app->view->enqueueScript("app", "ng.mapas-network", "js/ng.mapas-network.js", [/*"mapasculturais"*/]);
             $app->view->jsObject["angularAppDependencies"][] = "ng.mapas-network";
             return;
         });
