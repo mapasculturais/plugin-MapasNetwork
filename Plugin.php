@@ -98,10 +98,7 @@ class Plugin extends \MapasCulturais\Plugin
             if (empty(self::getCurrentUserNodes())) {
                 return;
             }
-            $app->view->enqueueScript("app", "mapas-network", "js/mapas-network.js", ["mapasculturais"]);
-            $app->view->localizeScript("pluginMapasNetwork", [
-                "confirmDeletionPropagation" => i::__("Deseja remover a entidade nos demais Mapas da rede?", "mapas-network"),
-            ]);
+            Plugin::addDeletionPropagationUX($app->view);
             return;
         });
         $app->hook("template(panel.<<agents|events|spaces>>.panel-new-fields-before):begin", function ($entity) {
@@ -114,6 +111,18 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
             $app->view->enqueueStyle("app", "mapas-network", "css/mapas-network.css");
+            return;
+        });
+        $app->hook("GET(<<agent|event|space>>.single):before", function () use ($app) {
+            /** @var MapasCulturais\Controllers\EntityController $this */
+            if (empty(self::getCurrentUserNodes())) {
+                return;
+            }
+            Plugin::addDeletionPropagationUX($app->view);
+            $app->view->jsObject["mapasNetworkData"] = [
+                "className" => $this->requestedEntity->className,
+                "controllerId" => $this->id,
+            ];
             return;
         });
         $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
@@ -619,6 +628,15 @@ class Plugin extends \MapasCulturais\Plugin
         // @todo trocar por slug do nó
         $slug = $this->nodeSlug;
         return "network__{$slug}_entity_id";
+    }
+
+    static function addDeletionPropagationUX(\MapasCulturais\Theme $view)
+    {
+        $view->enqueueScript("app", "mapas-network", "js/mapas-network.js", ["mapasculturais"]);
+        $view->localizeScript("pluginMapasNetwork", [
+            "confirmDeletionPropagation" => i::__("Deseja propagar a remoção para os demais Mapas da rede?", "mapas-network"),
+        ]);
+        return;
     }
 
     static function ensureNetworkID(\MapasCulturais\Entity $entity, \MapasCulturais\Entity $owner=null, string $key=null)
