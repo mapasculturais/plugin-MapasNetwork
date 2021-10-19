@@ -123,11 +123,11 @@ class Plugin extends \MapasCulturais\Plugin
                 (($entity->network__sync_control ?? self::SYNC_ON) != self::SYNC_DELETED)) {
                 $app->view->jsObject["entity"]["syncControl"] = !!($entity->network__sync_control ?? self::SYNC_ON);
                 $app->view->jsObject["entity"]["networkId"] = $entity->network__id;
-                $app->view->jsObject["gettext"]["pluginMapasNetwork"] = [
+                $app->view->localizeScript("pluginMapasNetwork", [
                     "syncControlError" => i::__("Ocorreu um erro ao alterar o controle de sincronização.", "mapas-network"),
                     "syncDisabled" => i::__("Sincronização desabilitada.", "mapas-network"),
-                    "syncEnabled" => i::__("Sincronização habilitada", "mapas-network")
-                ];
+                    "syncEnabled" => i::__("Sincronização habilitada", "mapas-network"),
+                ]);
                 $this->part("network-node/entity-sync-switch");
             }
             return;
