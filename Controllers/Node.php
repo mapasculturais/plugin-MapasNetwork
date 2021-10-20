@@ -1434,9 +1434,11 @@ class Node extends \MapasCulturais\Controller
     function findEntityId(string $class_name, string $network_id): int
     {
         $app = App::i();
-        $query = new \MapasNetwork\AllSeeingApiQuery($class_name, [
+        $query = new \MapasCulturais\ApiQuery($class_name, [
             "network__id" => "EQ($network_id)",
-            "user" => "EQ({$app->user->id})"
+            "status" => "GTE(-10)",
+            "user" => "EQ({$app->user->id})",
+            "@permissions" => "view",
         ]);
         $ids = $query->findIds();
         return ($ids[0] ?? 0);
