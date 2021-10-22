@@ -1,7 +1,7 @@
 <label>
-    <span class="switch" ng-controller="MapasNetworkController">
+    <span class="switch" ng-controller="MapasNetworkController" style="vertical-align: middle;">
         <input type="checkbox" ng-model="entityShouldSync" ng-change="toggleSync()" />
-        <span class="slider" style="top: 4px; bottom: -4px;"></span>
+        <span class="slider"></span>
     </span>
     Sincronizar
 </label>
