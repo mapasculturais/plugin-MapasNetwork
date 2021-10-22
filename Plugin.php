@@ -98,7 +98,7 @@ class Plugin extends \MapasCulturais\Plugin
             if (empty(self::getCurrentUserNodes())) {
                 return;
             }
-            Plugin::addDeletionPropagationUX($app->view);
+            Plugin::addPropagationUX($app->view);
             return;
         });
         $app->hook("template(panel.<<agents|events|spaces>>.panel-new-fields-before):begin", function ($entity) {
@@ -107,6 +107,9 @@ class Plugin extends \MapasCulturais\Plugin
                 return;
             }
             $this->part("network-node/mapas-network-entity-data.php", ["entity" => $entity]);
+            if (($entity->network__sync_control ?? self::SYNC_ON) != self::SYNC_DELETED) {
+                $this->part("network-node/panel-sync-switch.php", ["entity" => $entity]);
+            }
             return;
         });
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
@@ -118,7 +121,7 @@ class Plugin extends \MapasCulturais\Plugin
             if (empty(self::getCurrentUserNodes())) {
                 return;
             }
-            Plugin::addDeletionPropagationUX($app->view);
+            Plugin::addPropagationUX($app->view);
             $app->view->jsObject["mapasNetworkData"] = [
                 "className" => $this->requestedEntity->className,
                 "controllerId" => $this->id,
@@ -132,11 +135,6 @@ class Plugin extends \MapasCulturais\Plugin
                 (($entity->network__sync_control ?? self::SYNC_ON) != self::SYNC_DELETED)) {
                 $app->view->jsObject["entity"]["syncControl"] = !!($entity->network__sync_control ?? self::SYNC_ON);
                 $app->view->jsObject["entity"]["networkId"] = $entity->network__id;
-                $app->view->localizeScript("pluginMapasNetwork", [
-                    "syncControlError" => i::__("Ocorreu um erro ao alterar o controle de sincronização.", "mapas-network"),
-                    "syncDisabled" => i::__("Sincronização desabilitada.", "mapas-network"),
-                    "syncEnabled" => i::__("Sincronização habilitada", "mapas-network"),
-                ]);
                 $this->part("network-node/entity-sync-switch");
             }
             return;
@@ -216,6 +214,15 @@ class Plugin extends \MapasCulturais\Plugin
         $entities_hook_prefix = "entity(<<Agent|Space>>)";
         $entities_hook_prefix_all = "entity(<<Agent|Event|Space>>)";
 
+        $app->hook("$entities_hook_prefix_all.delete:after", function () use ($plugin) {
+            /** @var \MapasCulturais\Entity $this */
+            if (($this->network__sync_control ?? self::SYNC_ON) != self::SYNC_ON) {
+                $this->network__sync_control = self::SYNC_DELETED;
+                $plugin->skip($this, [self::SKIP_BEFORE, self::SKIP_AFTER]);
+                $this->save();
+            }
+            return;
+        });
         $app->hook("$entities_hook_prefix_all.get(networkRevisionPrefix)", function (&$value) use ($plugin) {
             /** @var \MapasCulturais\Entity $this */
             $slug = $plugin->nodeSlug;
@@ -630,11 +637,14 @@ class Plugin extends \MapasCulturais\Plugin
         return "network__{$slug}_entity_id";
     }
 
-    static function addDeletionPropagationUX(\MapasCulturais\Theme $view)
+    static function addPropagationUX(\MapasCulturais\Theme $view)
     {
         $view->enqueueScript("app", "mapas-network", "js/mapas-network.js", ["mapasculturais"]);
         $view->localizeScript("pluginMapasNetwork", [
-            "confirmDeletionPropagation" => i::__("Deseja propagar a remoção para os demais Mapas da rede?", "mapas-network"),
+            "deletionPropagationTooltip" => i::__("Se a sincronização estiver habilitada, a entidade será apagada nos demais Mapas da rede.", "mapas-network"),
+            "syncControlError" => i::__("Ocorreu um erro ao alterar o controle de sincronização.", "mapas-network"),
+            "syncDisabled" => i::__("Sincronização desabilitada.", "mapas-network"),
+            "syncEnabled" => i::__("Sincronização habilitada", "mapas-network"),
         ]);
         return;
     }

@@ -822,38 +822,6 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
-    function ALL_insularDelete()
-    {
-        $this->requireAuthentication();
-        $app = App::i();
-        $controller_id = array_key_first($this->data);
-        if (!$controller_id) {
-            $this->errorJson("Missing parameters.", 400);
-        }
-        $entity_id = intval($this->data[$controller_id] ?? "0");
-        if (!$entity_id) {
-            $this->errorJson("Missing entity ID.", 400);
-        }
-        $controller = $app->controller($controller_id);
-        if (!($controller instanceof \MapasCulturais\Controllers\EntityController)) {
-            $this->errorJson("Controller not allowed.", 403);
-        }
-        $entity = $controller->repository->find($entity_id);
-        $classes = [
-            Agent::class,
-            Event::class,
-            Space::class,
-        ];
-        if (!in_array($entity->className, $classes)) {
-            // @todo arrumar esse throw
-            throw new PermissionDenied($app->user, $app->user, "delete");
-        }
-        $entity->network__sync_control = Plugin::SYNC_DELETED;
-        $entity->save(true);
-        $app->redirect($app->createUrl($controller_id, "delete", [$entity_id]));
-        return;
-    }
-
     function POST_scopedEntity()
     { // the name of the endpoint is used for decisions, do not unify
         $this->POST_createdEntity();

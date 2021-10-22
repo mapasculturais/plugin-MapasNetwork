@@ -1,14 +1,3 @@
-var MapasNetwork = {
-    confirmDeletionPropagation: function (event, entityId, controllerId) {
-        if (!confirm(MapasCulturais.gettext.pluginMapasNetwork.confirmDeletionPropagation)) {
-            params = {};
-            params[controllerId] = entityId;
-            $(event.target).attr("href", MapasCulturais.createUrl("network-node", "insularDelete", params));
-        }
-        return;
-    }
-};
-
 $(function () {
     $("#add-network-node .js-cancel").click(function (e) {
         $("#add-network-node form").get(0).reset();
@@ -21,20 +10,40 @@ $(function () {
         return;
     });
 
-    // for panel
-    $(".entity-actions .btn-danger").click(function (e) {
-        meta = $(e.target).parent().siblings(".objeto-meta");
-        eid = $("input.mned-id", meta).val();
-        ectrlid = $("input.mned-controller-id", meta).val();
-        MapasNetwork.confirmDeletionPropagation(e, eid, ectrlid);
+    $(".entity-actions .btn-danger, .js--remove-entity-button").each(function () {
+        const q = $(this).addClass("hltip");
+        const title = q.attr("title");
+        var titles = (typeof(title) != "string") ? [] : [title];
+        titles.push(MapasCulturais.gettext.pluginMapasNetwork.deletionPropagationTooltip);
+        q.attr("title", titles.join(" "));
         return;
     });
 
-    // for "single" page
-    $(".js--remove-entity-button").click(function (e) {
-        MapasNetwork.confirmDeletionPropagation(e, MapasCulturais.entity.id, MapasCulturais.mapasNetworkData.controllerId);
+    $(".objeto-meta .js-sync-switch input").change(function (e) {
+        var q = $(e.target);
+        const value = q.is(":checked");
+        q.prop("disabled", true);
+        $.post(MapasCulturais.createUrl("network-node", "syncControl"), {
+            "network__id": q.closest(".objeto-meta").children(".mned-network-id").val(),
+            "value": value,
+        }).done(function() {
+            const message = value ? MapasCulturais.gettext.pluginMapasNetwork.syncEnabled :
+                                    MapasCulturais.gettext.pluginMapasNetwork.syncDisabled;
+            MapasCulturais.Messages.success(message);
+            return;
+        }).fail(function () {
+            q.prop("checked", !value);
+            MapasCulturais.Messages.error(MapasCulturais.gettext.pluginMapasNetwork.syncControlError);
+            return;
+        }).always(function () {
+            q.prop("disabled", false);
+            return;
+        });
         return;
-    });
+    })
 
+    if ($("#editable-entity").length == 0) {
+        $("#main-section").before("<div id=\"editable-entity\" style=\"background: none; border: none; box-shadow: none; height: 0px; min-height: 0px;\"></div>");
+    }
     return;
 });
