@@ -787,7 +787,11 @@ class Plugin extends \MapasCulturais\Plugin
         $app = App::i();
         preg_match("#:(\w+):\d*:#", $network__id, $matches);
         $class_name = "MapasCulturais\\Entities\\" . $matches[1];
-        $query = new \MapasNetwork\AllSeeingApiQuery($class_name, ["network__id" => "EQ({$network__id})"]);
+        $query = new ApiQuery($class_name, [
+            "network__id" => "EQ({$network__id})",
+            "status" => "GTE(-10)",
+            "@permissions" => "view",
+        ]);
         $ids = $query->findIds();
         $id = $ids[0] ?? null;
         $entity = $id ? $app->repo($class_name)->find($id) : null;
