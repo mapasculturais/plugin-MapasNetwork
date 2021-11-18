@@ -1063,6 +1063,8 @@ class Node extends \MapasCulturais\Controller
                     }
                 }
                 if (!$linked) {
+                    $metakey = $origin_node->entityMetadataKey;
+                    $foreign_data[$metakey] = $foreign_data["id"];
                     $this->plugin->createEntity($entity->getClassName(), $foreign_data["network__id"], $foreign_data);
                 }
             }
