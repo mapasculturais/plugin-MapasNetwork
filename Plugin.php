@@ -1028,7 +1028,10 @@ class Plugin extends \MapasCulturais\Plugin
         $entity = new $class_name;
         $data = $this->unserializeEntity($data);
         Plugin::convertEntityData($entity, $data);
-        $entity->save(true);
+        $this->sudo(function () use ($entity) {
+            $entity->save(true);
+            return;
+        });
         return $entity;
     }
 
