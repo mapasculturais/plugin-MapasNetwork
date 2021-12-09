@@ -14,7 +14,7 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
         <?php $this->applyTemplateHook("panel-header", "before"); ?>
         <?php $this->applyTemplateHook("panel-header", "begin"); ?>
         <div class="container-subitle-line">
-            <h2><span id="subtitle-panel"><?php i::_e("Mapas vinculados"); ?></span>
+            <h2><span class="subtitle-panel"><?php i::_e("Mapas vinculados"); ?></span>
                 <hr>
             </h2>
         </div>
@@ -25,15 +25,23 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
 
     <?php if ($found_accounts) : ?>
         <div class="alert info">
-            <?php i::_e('Detectamos que você possui conta nos mapas culturais listados abaixo. Recomendamos que você vincule suas contas para que suas informações fiquem sincronizadas.'); ?>
+            <span><?php i::_e('Você não vinculou sua conta em nenhum Mapa Cultural. Veja os mapas disponíveis vinculação de conta ou utilize o botão “Vincular conta” para adicionar um Mapa Cultural não listado.'); ?>
+            </span>
         </div>
         <?php foreach ($found_accounts as $url) : ?>
+
+            <div class="container-subitle-line">
+                <h2 class="subtitle-panel">Mapas que você possui conta</h2>
+                <hr>
+            </div>
             <article class="objeto clearfix">
-                <h1><?= $url; ?></h1>
-                <form method="POST" action="<?= $this->controller->createUrl('create') ?>">
-                    <input type="hidden" name="url" value="<?= $url ?>" />
-                    <button class="btn btn-small btn-primary"><?php i::_e("vincular conta"); ?></button>
-                </form>
+                <div class="btn-clearfix-position">
+                    <h1><?= $url; ?></h1>                  
+                        <form method="POST" action="<?= $this->controller->createUrl('create') ?>">
+                            <input type="hidden" name="url" value="<?= $url ?>" />
+                            <button class="btn btn-small btn-primary"><?php i::_e("vincular conta"); ?></button>
+                        </form>
+                </div>
             </article>
         <?php endforeach; ?>
     <?php endif; ?>
