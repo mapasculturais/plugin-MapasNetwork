@@ -28,7 +28,7 @@
 
 .network-container header .icon {
     display: inline-block;
-    margin: 0 auto  30px;
+    margin: 0 auto 30px;
 }
 
 .network-container header .icon i {
@@ -39,7 +39,7 @@
 .network-container .card {
     background-color: #ffffff;
     border-radius: 10px;
-    box-shadow: 0 2px 6px 0 rgba(0,0,0,0.3);
+    box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.3);
     margin: 30px auto 60px;
     max-width: 370px;
     padding: 30px;
@@ -65,7 +65,7 @@
 
 .network-container .card .integration .top {
     background-color: #ffffff;
-    border: 2px solid #1C5690;
+    border: 2px solid #1c5690;
     border-radius: 50px;
     height: 13px;
     left: 7px;
@@ -75,14 +75,14 @@
 }
 
 .network-container .card .integration .line {
-    border-left: 2px dashed #1C5690;
+    border-left: 2px dashed #1c5690;
     height: 60%;
     margin: 25px auto;
     width: 1px;
 }
 
 .network-container .card .integration .icon {
-    background-color: #1C5690;
+    background-color: #1c5690;
     bottom: 20px;
     border-radius: 50px;
     box-sizing: border-box;
@@ -99,7 +99,7 @@
 }
 
 .network-container .card .integration .agent {
-    border-bottom: 1px solid #DDDDDD;
+    border-bottom: 1px solid #dddddd;
     display: flex;
     margin-bottom: 20px;
     padding-bottom: 20px;
@@ -123,7 +123,7 @@
 }
 
 .network-container .card .integration .agent a {
-    color: #1C5690;
+    color: #1c5690;
     font-size: 14px;
 }
 
@@ -141,7 +141,7 @@
     font-weight: bold;
     height: auto;
     padding: 16px 48px;
-    transition: all .2s ease-in-out;
+    transition: all 0.2s ease-in-out;
 }
 
 .network-container .card footer button:hover {
@@ -149,12 +149,12 @@
 }
 
 .network-container .card footer button:first-child {
-    background-color: #DDDDDD;
+    background-color: #dddddd;
     color: #333333;
 }
 
 .network-container .card footer button:last-child {
-    background-color: #1C5690;
+    background-color: #1c5690;
     color: #ffffff;
 }
 
@@ -185,4 +185,23 @@
     .network-container .card footer button {
         padding: 16px 40px;
     }
+}
+
+.container-panel-header { /* transforma o titulo principal e o subtitulo em bloco dentro da div */
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-list #title-panel { /* alteração do style do titulo principal */
+    font-style: normal;
+    font-weight: normal;
+    font-size: 28px;
+    line-height: 29px;
+}
+
+.panel-list #subtitle-panel { /* alteração do style do subtitulo principal */
+    font-style: normal;
+    font-weight: 100;
+    font-size: 20px;
+    line-height: 24px;
 }
