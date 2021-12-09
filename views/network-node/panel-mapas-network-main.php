@@ -12,8 +12,12 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
     <div class="container-panel-header">
         <h2><span id="title-panel">Vinculação de conta com outros Mapas Culturais</span> </h2>
         <?php $this->applyTemplateHook("panel-header", "before"); ?>
-            <?php $this->applyTemplateHook("panel-header", "begin"); ?>
-            <h2><span id="subtitle-panel"><?php i::_e("Mapas vinculados"); ?></span></h2>
+        <?php $this->applyTemplateHook("panel-header", "begin"); ?>
+        <div class="container-subitle-line">
+            <h2><span id="subtitle-panel"><?php i::_e("Mapas vinculados"); ?></span>
+                <hr>
+            </h2>
+        </div>
     </div>
     <?php $this->applyTemplateHook("panel-header", "end") ?>
     </header>
