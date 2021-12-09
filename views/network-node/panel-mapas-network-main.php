@@ -50,14 +50,11 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
         <?php foreach ($nodes as $node) : ?>
             <?php $this->part("network-node/panel-node.php", array("entity" => $node)); ?>
         <?php endforeach; ?>
-        <?php if (!$nodes) : ?>
-            <div class="alert info"><?php i::_e("Você não possui nenhum Mapa vinculado."); ?></div>
-        <?php endif; ?>
+        <!-- alert-info deletado para melhoria de layout -->
     </div>
 
-    <div class="alert info">
-        <?php i::_e('Se você possui conta em outro mapa cultural que não esteja listado acima, você pode vincular as contas utilizando o botão abaixo.'); ?>
-    </div>
+            <!-- alert-info deletado para melhoria de layout -->
+
     <div class="btn btn-default add">
         <a class="js-open-dialog" href="javascript:void(0)" data-dialog-block="true" data-dialog="#add-network-node" data-dialog-callback="MapasCulturais.addEntity" data-form-action="insert" data-dialog-title="<?php i::_e("Vincule uma conta de Mapa Cultural"); ?>">
             <?php i::_e("Vincular conta em outro mapa cultural"); ?>
