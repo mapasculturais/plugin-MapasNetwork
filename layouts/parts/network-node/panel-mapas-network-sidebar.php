@@ -1,1 +1,1 @@
-<li><a <?php if ($this->template == "network-node/panel-mapas-network-main") { echo "class=\"active\""; } ?> href="<?php echo $app->createUrl("network-node", "panel") ?>"><span class="icon plug"></span> <?php \MapasCulturais\i::_e("Rede de Mapas Culturais");?></a></li>
+<li><a <?php if ($this->template == "network-node/panel-mapas-network-main") { echo "class=\"active\""; } ?> href="<?php echo $app->createUrl("network-node", "panel") ?>"><span class="icon plug"></span> <?php \MapasCulturais\i::_e("Vinculação de conta");?></a></li>
