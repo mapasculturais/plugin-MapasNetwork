@@ -225,3 +225,6 @@
     flex-wrap: wrap;
     align-items: flex-end;
 }
+.objeto .btn-clearfix-position h1 {
+    border:none;
+}
