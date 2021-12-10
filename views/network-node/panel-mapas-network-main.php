@@ -25,7 +25,7 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
 
     <?php if ($found_accounts) : ?>
         <div class="alert info">
-            <span><?php i::_e('Você não vinculou sua conta em nenhum Mapa Cultural. Veja os mapas disponíveis vinculação de conta ou utilize o botão “Vincular conta” para adicionar um Mapa Cultural não listado.'); ?>
+            <span id="alert-text"><?php i::_e('Você não vinculou sua conta em nenhum Mapa Cultural. Veja os mapas disponíveis vinculação de conta ou utilize o botão “Vincular conta” para adicionar um Mapa Cultural não listado.'); ?>
             </span>
         </div>
         <div class="container-subitle-line">
