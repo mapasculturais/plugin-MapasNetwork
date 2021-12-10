@@ -228,3 +228,21 @@
 .objeto .btn-clearfix-position h1 {
     border:none;
 }
+
+.container-objeto-clearfix{
+    display: flex;
+    /* display: contents; */
+    flex-direction: column;
+    /* padding: 1rem; */
+    height: 10rem;
+    /* flex-wrap: nowrap; */
+    align-content: space-between;
+    justify-content: space-between;
+}
+.container-btn-addaccount{
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 30px;
+}

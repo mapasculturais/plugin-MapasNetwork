@@ -32,6 +32,7 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
                 <h2 class="subtitle-panel"><?php i::_e ("Mapas que você possui conta");?></h2>
                 <hr>
             </div>
+            <div class="container-objeto-clearfix">
         <?php foreach ($found_accounts as $url) : ?>
             <article class="objeto clearfix">
                 <div class="btn-clearfix-position">
@@ -41,8 +42,9 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
                             <button class="btn btn-small btn-primary"><?php i::_e("vincular conta"); ?></button>
                         </form>
                 </div>
-            </article>
+            </article>   
         <?php endforeach; ?>
+        </div>
     <?php endif; ?>
 
     <div id="main">
@@ -53,13 +55,13 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
     </div>
 
             <!-- alert-info deletado para melhoria de layout-->
-
-    <div class="btn btn-default add">
-        <a class="js-open-dialog" href="javascript:void(0)" data-dialog-block="true" data-dialog="#add-network-node" data-dialog-callback="MapasCulturais.addEntity" data-form-action="insert" data-dialog-title="<?php i::_e("Vincule uma conta de Mapa Cultural"); ?>">
-            <?php i::_e("Vincular conta em outro mapa cultural"); ?>
-        </a>
+        <div class="container-btn-addaccount">
+            <div class="btn btn-default add">
+                <a class="js-open-dialog" href="javascript:void(0)" data-dialog-block="true" data-dialog="#add-network-node" data-dialog-callback="MapasCulturais.addEntity" data-form-action="insert" data-dialog-title="<?php i::_e("Vincule uma conta de Mapa Cultural"); ?>">
+                    <?php i::_e("Vincular conta em outro mapa cultural"); ?>
+                </a>
+            </div>
     </div>
-
     <div id="add-network-node" class="entity-modal has-step js-dialog " style="display: none">
         <a href="#" class="js-close icon icon-close" rel="noopener noreferrer"></a>
         <header>
