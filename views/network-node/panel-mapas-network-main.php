@@ -34,8 +34,8 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
             </div>
             <div class="container-objeto-clearfix">
         <?php foreach ($found_accounts as $url) : ?>
-            <article class="objeto clearfix">
-                <div class="btn-clearfix-position">
+            <article class="objeto clearfix refact">
+                <div class="btn-clearfix-position ">
                     <h1><?= $url; ?></h1>                  
                         <form method="POST" action="<?= $this->controller->createUrl('create') ?>">
                             <input type="hidden" name="url" value="<?= $url ?>" />
