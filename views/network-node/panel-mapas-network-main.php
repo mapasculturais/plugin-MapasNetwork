@@ -10,7 +10,7 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
 ?>
 <div class="panel-list panel-main-content">
     <div class="container-panel-header">
-        <h2><span id="title-panel">Vinculação de conta com outros Mapas Culturais</span> </h2>
+        <h2><span id="title-panel"><?php i::_e('Vinculação de conta com outros Mapas Culturais');?></span> </h2>
         <?php $this->applyTemplateHook("panel-header", "before"); ?>
         <?php $this->applyTemplateHook("panel-header", "begin"); ?>
         <div class="container-subitle-line">
@@ -31,7 +31,7 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
         <?php foreach ($found_accounts as $url) : ?>
 
             <div class="container-subitle-line">
-                <h2 class="subtitle-panel">Mapas que você possui conta</h2>
+                <h2 class="subtitle-panel"><?php i::_e ("Mapas que você possui conta");?></h2>
                 <hr>
             </div>
             <article class="objeto clearfix">
@@ -53,7 +53,7 @@ $url = \MapasCulturais\App::i()->createUrl("network-node", "create");
         <!-- alert-info deletado para melhoria de layout -->
     </div>
 
-            <!-- alert-info deletado para melhoria de layout -->
+            <!-- alert-info deletado para melhoria de layout-->
 
     <div class="btn btn-default add">
         <a class="js-open-dialog" href="javascript:void(0)" data-dialog-block="true" data-dialog="#add-network-node" data-dialog-callback="MapasCulturais.addEntity" data-form-action="insert" data-dialog-title="<?php i::_e("Vincule uma conta de Mapa Cultural"); ?>">
