@@ -1045,8 +1045,8 @@ class Node extends \MapasCulturais\Controller
         $app = App::i();
         $origin_node = $this->getRequestOriginNode();
         $inputs = [
-            ["local" => $app->user->enabledAgents, "remote" => ($this->postData["agents"] ?? [])],
-            ["local" => $app->user->enabledSpaces, "remote" => ($this->postData["spaces"] ?? [])]
+            ["local" => $app->user->enabledAgents, "remote" => ($this->postData["agents"] ?? []), "type" => Agent::class],
+            ["local" => $app->user->enabledSpaces, "remote" => ($this->postData["spaces"] ?? []), "type" => Space::class]
         ];
         foreach ($inputs as $input) {
             foreach ($input["remote"] as $foreign_data) {
@@ -1065,7 +1065,7 @@ class Node extends \MapasCulturais\Controller
                 if (!$linked) {
                     $metakey = $origin_node->entityMetadataKey;
                     $foreign_data[$metakey] = $foreign_data["id"];
-                    $this->plugin->createEntity($entity->getClassName(), $foreign_data["network__id"], $foreign_data);
+                    $this->plugin->createEntity($input["type"], $foreign_data["network__id"], $foreign_data);
                 }
             }
         }
