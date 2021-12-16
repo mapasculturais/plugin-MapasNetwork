@@ -131,6 +131,9 @@ class Plugin extends \MapasCulturais\Plugin
         $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
             /** @var MapasCulturais\Theme $this */
             $entity = $this->controller->requestedEntity;
+            if ($app->mode == APPMODE_DEVELOPMENT) {
+                echo "<!-- {$entity->network__id} -->";
+            }
             if (($app->user->id == $entity->ownerUser->id) &&
                 (($entity->network__sync_control ?? self::SYNC_ON) != self::SYNC_DELETED)) {
                 $app->view->jsObject["entity"]["syncControl"] = !!($entity->network__sync_control ?? self::SYNC_ON);
