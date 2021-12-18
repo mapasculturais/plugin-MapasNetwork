@@ -128,7 +128,7 @@ class Plugin extends \MapasCulturais\Plugin
             ];
             return;
         });
-        $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
+        $app->hook("template(<<agent|event|space>>.<<*>>.name):before", function () use ($app) {
             /** @var MapasCulturais\Theme $this */
             $entity = $this->controller->requestedEntity;
             if ($app->mode == APPMODE_DEVELOPMENT) {
