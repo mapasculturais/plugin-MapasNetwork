@@ -23,6 +23,9 @@ class UpdateNetworkIdJobType extends \MapasCulturais\Definitions\JobType
         $entity = $job->entity;
         // ugly but we need these registrations and they can't be moved to Plugin::register
         $this->plugin->registerEntityMetadataKeyForNodes(Plugin::getEntityNodes($entity->owner));
+        if ($job->current_network__id == $job->new_network__id) {
+            return true;
+        }
         $this->plugin->foreachEntityNodeDo($entity, function ($node, $entity) use ($job, $skip_node) {
             if ($node->equals($skip_node)) {
                 return;
