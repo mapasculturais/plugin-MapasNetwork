@@ -27,18 +27,18 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
 
         $allowed_metalist_groups = $this->plugin->allowedMetaListGroups;
         $file_groups = [
-            ((string) Agent::class) => array_keys($app->getRegisteredFileGroupsByEntity(Agent::class)),
-            ((string) Space::class) => array_keys($app->getRegisteredFileGroupsByEntity(Space::class))
+            "agent" => array_keys($app->getRegisteredFileGroupsByEntity(Agent::class)),
+            "space" => array_keys($app->getRegisteredFileGroupsByEntity(Space::class))
         ];
         $metalist_groups = [
-            ((string) Agent::class) => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Agent::class)), $allowed_metalist_groups),
-            ((string) Space::class) => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)), $allowed_metalist_groups)
+            "agent" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Agent::class)), $allowed_metalist_groups),
+            "space" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)), $allowed_metalist_groups)
         ];
         $map_ids = function ($entity) { return $entity->id; };
         $map_serialize = function ($entity) use ($file_groups, $metalist_groups) {
             $serialised = $this->plugin->serializeEntity($entity);
-            $serialised = $this->plugin->serializeAttachments($entity, "files", $file_groups, $serialised);
-            $serialised = $this->plugin->serializeAttachments($entity, "metalists", $metalist_groups, $serialised);
+            $serialised = $this->plugin->serializeAttachments($entity, "files", $file_groups[$entity->controllerId], $serialised);
+            $serialised = $this->plugin->serializeAttachments($entity, "metalists", $metalist_groups[$entity->controllerId], $serialised);
             return $serialised;
         };
 
@@ -65,7 +65,6 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
             'agents' => array_map($map_serialize, $agents),
             'spaces' => array_map($map_serialize, $spaces),
         ];
-
         $node->api->apiPost('network-node/bootstrapSync', $data);
         return true;
     }
