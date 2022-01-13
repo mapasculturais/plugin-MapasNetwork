@@ -433,7 +433,7 @@ class Node extends \MapasCulturais\Controller
         $files = $data["files"] ?? null;
         $metalists = $data["metalists"] ?? null;
         $data = $this->plugin->unserializeEntity($data, $node);
-        $entity = $this->plugin->createEntity($class_name, $network_id, $data);
+        $entity = $this->plugin->createEntity($class_name, $network_id, $data, $node);
         if ($files) {
             $this->bootstrapFiles($entity, $files, $data, $node);
         }
@@ -482,35 +482,16 @@ class Node extends \MapasCulturais\Controller
         }
         // unlike event, space comes as embedded data, so we still need to look for the entity
         $space = $this->plugin->unserializeEntity($data["space"]);
-        $space_entity = $this->plugin->getEntityByNetworkId($space["network__id"]);
-        if (!$space_entity) {
-            if (!$space["owner"]) {
-                $id = Plugin::getProxyUserIDForNode($node->slug);
-                if (!$id) {
-                    throw new \Exception("The proxy user for {$node->slug} does not exist.");
-                }
-                $proxy_user = $app->repo("User")->find($id);
-                $space["owner"] = $proxy_user->profile;
-                $space["network__proxied_owner"] = $data["space"]["owner"];
-            }
-            $plugin = $this->plugin;
-            // the space's owner isn't necessarily the event's owner so this must be sudone
-            Plugin::sudo(function () use ($node, $plugin, $space) {
-                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space);
-                $space_entity->{$node->entityMetadataKey} = $space["id"];
-                $space_entity->save(true);
-                return;
-            });
-        }
-        $data["space"] = "@entity:{$space["network__id"]}";
+        $space_entity = $this->plugin->resolveVenue($space, $node);
+        $data["space"] = "@entity:{$space_entity->network__id}";
         if ($event && $space) {
             $data = $this->plugin->unserializeEntity($data);
             $plugin = $this->plugin;
-            Plugin::sudo(function () use ($class_name, $data, $event, $network_id, $plugin) {
+            Plugin::sudo(function () use ($class_name, $data, $event, $network_id, $node, $plugin) {
                 $ids_map = ((array) $event->network__occurrence_ids) ?? [];
                 $ids_map[$network_id] = Plugin::UNKNOWN_ID;
                 $event->network__occurrence_ids = $ids_map;
-                $plugin->createEntity($class_name, $network_id, $data);
+                $plugin->createEntity($class_name, $network_id, $data, $node);
                 return;
             });
         } else { // if we need to grab the event, best to do so after we've replied to the POST
@@ -875,7 +856,6 @@ class Node extends \MapasCulturais\Controller
             if (in_array($revision_id, $entity->network__revisions)) {
                 $this->json("$network_id $revision_id already exists");
                 if (!($entity->$metakey ?? null)) {
-                    $app->log->debug("Saving $metakey for node {$node->slug}.");
                     $entity->$metakey = $data["id"];
                     $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
                     $entity->save(true);
@@ -928,8 +908,8 @@ class Node extends \MapasCulturais\Controller
             }
             $plugin = $this->plugin;
             // the space's owner isn't necessarily the event's owner so this must be sudone
-            Plugin::sudo(function () use ($plugin, $space) {
-                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space);
+            Plugin::sudo(function () use ($node, $plugin, $space) {
+                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space, $node);
                 $space_entity->save(true);
                 return;
             });
@@ -1071,7 +1051,7 @@ class Node extends \MapasCulturais\Controller
                 if (!$linked) {
                     $metakey = $origin_node->entityMetadataKey;
                     $foreign_data[$metakey] = $foreign_data["id"];
-                    $this->plugin->createEntity($input["type"], $foreign_data["network__id"], $foreign_data);
+                    $this->plugin->createEntity($input["type"], $foreign_data["network__id"], $foreign_data, $origin_node);
                 }
             }
         }

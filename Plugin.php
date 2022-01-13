@@ -14,9 +14,6 @@ use MapasCulturais\App;
 use MapasCulturais\Entity;
 use MapasCulturais\i;
 
-use MapasCulturais\Entities\Agent;
-use MapasCulturais\Entities\Space;
-
 use MapasNetwork\Entities\Node;
 use MapasSDK\Exceptions\BadRequest;
 use MapasSDK\Exceptions\Unauthorized;
@@ -810,7 +807,7 @@ class Plugin extends \MapasCulturais\Plugin
         $entity = $id ? $app->repo($class_name)->find($id) : null;
         if (!$entity && $not_found_node) {
             $response = $not_found_node->api->apiGet("network-node/entity", ["network__id" => $network__id]);
-            $entity = $this->createEntity($class_name, $network__id, (array) $response->response);
+            $entity = $this->createEntity($class_name, $network__id, (array) $response->response, $not_found_node);
         }
         return $entity;
     }
@@ -1024,7 +1021,7 @@ class Plugin extends \MapasCulturais\Plugin
         return;
     }
 
-    function createEntity($class_name, $network_id, array $data)
+    function createEntity($class_name, $network_id, array $data, Node $origin)
     {
         $app = App::i();
         $app->log->debug("creating $network_id");
@@ -1097,6 +1094,31 @@ class Plugin extends \MapasCulturais\Plugin
         Plugin::saveMetadata($occurrence->space->owner, ["network__id"]);
         $this->syncEventOccurrence($occurrence, "createdEventOccurrence");
         return;
+    }
+
+    function resolveVenue(array $space, Node $node)
+    {
+        $space_entity = $this->getEntityByNetworkId($space["network__id"]);
+        if (!$space_entity) {
+            if (!$space["owner"]) {
+                $id = Plugin::getProxyUserIDForNode($node->slug);
+                if (!$id) {
+                    throw new \Exception("The proxy user for {$node->slug} does not exist.");
+                }
+                $proxy_user = App::i()->repo("User")->find($id);
+                $space["network__proxied_owner"] = $space["owner"];
+                $space["owner"] = $proxy_user->profile;
+            }
+            $plugin = $this->plugin;
+            // the space's owner isn't necessarily the event's owner so this must be sudone
+            Plugin::sudo(function () use ($node, $plugin, $space) {
+                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space, $node);
+                $space_entity->{$node->entityMetadataKey} = $space["id"];
+                $space_entity->save(true);
+                return;
+            });
+        }
+        return $space_entity;
     }
 
     function shouldSkip(Entity $entity, $skip_type)

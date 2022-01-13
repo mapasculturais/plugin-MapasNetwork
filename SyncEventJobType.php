@@ -41,7 +41,7 @@ class SyncEventJobType extends \MapasCulturais\Definitions\JobType
         $ids[$network_id] = Plugin::UNKNOWN_ID;
         $event->network__occurrence_ids = $ids;
         $class_name = Plugin::getClassFromNetworkID($network_id);
-        $occurrence = $this->plugin->createEntity($class_name, $network_id, $occurrence);
+        $occurrence = $this->plugin->createEntity($class_name, $network_id, $occurrence, $job->node);
         return true;
     }
 
