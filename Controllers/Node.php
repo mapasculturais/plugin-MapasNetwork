@@ -11,6 +11,7 @@ use MapasCulturais\Utils;
 use MapasCulturais\Traits;
 
 use MapasCulturais\Entities\Agent;
+use MapasCulturais\Entities\Event;
 use MapasCulturais\Entities\EventOccurrence;
 use MapasCulturais\Entities\Space;
 use MapasCulturais\Exceptions\PermissionDenied;
@@ -1027,11 +1028,18 @@ class Node extends \MapasCulturais\Controller
         $inputs = [
             [
                 "local" => array_merge($app->user->enabledAgents, $app->user->draftAgents),
-                "remote" => ($this->postData["agents"] ?? []), "type" => Agent::class
+                "remote" => ($this->postData["agents"] ?? []),
+                "type" => Agent::class,
+            ],
+            [
+                "local" => array_merge($app->user->enabledEvents, $app->user->draftEvents),
+                "remote" => ($this->postData["events"] ?? []),
+                "type" => Event::class,
             ],
             [
                 "local" => array_merge($app->user->enabledSpaces, $app->user->draftSpaces),
-                "remote" => ($this->postData["spaces"] ?? []), "type" => Space::class
+                "remote" => ($this->postData["spaces"] ?? []),
+                "type" => Space::class,
             ]
         ];
         foreach ($inputs as $input) {
@@ -1267,12 +1275,18 @@ class Node extends \MapasCulturais\Controller
         return;
     }
 
-    function compareEntityData(Entity $entity, array $foreign_data) {
-        if($entity instanceof Agent) {
+    function compareEntityData(Entity $entity, array $foreign_data)
+    {
+        if ($entity instanceof Agent) {
             return $this->compareAgentData($entity, $foreign_data);
-        } else if ($entity instanceof Space) {
+        }
+        if ($entity instanceof Event) {
+            return $this->compareEventData($entity, $foreign_data);
+        }
+        if ($entity instanceof Space) {
             return $this->compareSpaceData($entity, $foreign_data);
         }
+        return false;
     }
 
     function compareAgentData(Agent $agent, array $foreign_data) {
@@ -1316,6 +1330,45 @@ class Node extends \MapasCulturais\Controller
         }
 
         return false;
+    }
+
+    function compareEventData(Event $event, array $foreign_data)
+    {
+        $data = (object) $foreign_data;
+        // verifica se é o mesmo tipo
+        if ($data->type != (string) $event->type) {
+            return false;
+        }
+        // verifica networkID
+        $anetwork__id = $event->network__id ?? "";
+        $fnetwork__id = $data->network__id ?? "";
+        if ($anetwork__id && ($anetwork__id == $fnetwork__id)) {
+            return true;
+        }
+        // verifica nome
+        if ($data->name ?? null) {
+            $fname = Utils::slugify($data->name);
+            $aname = Utils::slugify($event->name ?? "");
+            if (!Utils::isTheSameName($fname, $aname)) {
+                return false;
+            }
+        }
+        // verifica ocorrências
+        $matched = false;
+        foreach ($event->occurrences as $occurrence) {
+            foreach ($data->occurrence as $foccurrence) {
+                $foccurrence = (object) $foccurrence;
+                if (!$this->compareSpaceData($occurrence->space, $foccurrence->space)) {
+                    continue;
+                }
+                $matched = true;
+                break;
+            }
+            if ($matched) {
+                break;
+            }
+        }
+        return $matched;
     }
 
     function compareSpaceData(Space $space, array $foreign_data) {

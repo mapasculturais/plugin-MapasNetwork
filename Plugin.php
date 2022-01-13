@@ -100,7 +100,7 @@ class Plugin extends \MapasCulturais\Plugin
         });
         $app->hook("template(panel.<<agents|events|spaces>>.panel-new-fields-before):begin", function ($entity) {
             /** @var MapasCulturais\Theme $this */
-            if (empty(self::getCurrentUserNodes())) {
+            if (empty(self::getCurrentUserNodes()) || !isset($entity->network__id)) {
                 return;
             }
             $this->part("network-node/mapas-network-entity-data.php", ["entity" => $entity]);
@@ -285,7 +285,7 @@ class Plugin extends \MapasCulturais\Plugin
         // for insertion, we need to watch EventOccurrence insertion rather than Event insertion
         $app->hook("entity(EventOccurrence).insert:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\EventOccurrence $this */
-            if ($plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
+            if (!$this->event || $plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
                 return;
             }
             Plugin::ensureNetworkID($this->event);
@@ -744,6 +744,13 @@ class Plugin extends \MapasCulturais\Plugin
                 if (isset($temp_value["space"])) {
                     $temp_value["space"] = $this->serializeEntity($value->space);
                 }
+            } else if (($value instanceof \MapasCulturais\Entities\Event) && (!empty((array) $value->occurrences))) {
+                $temp_value["occurrences"] = [];
+                foreach ($value->occurrences as $occurrence) {
+                    $new_occurrence = $this->serializeEntity($occurrence);
+                    $new_occurrence["space"]["network__id"] = $occurrence->space->network__id;
+                    $temp_value["occurrences"][] = $new_occurrence;
+                }
             }
             $value = $temp_value;
         }
@@ -1028,6 +1035,12 @@ class Plugin extends \MapasCulturais\Plugin
         $entity = new $class_name;
         $data = $this->unserializeEntity($data);
         Plugin::convertEntityData($entity, $data);
+        foreach (($data["occurrences"] ?? []) as $occurrence) {
+            $network_id = array_search($occurrence["id"], $data["network__occurrence_ids"]);
+            $this->skip($entity, [self::SKIP_BEFORE, self::SKIP_AFTER]);
+            $occurrence["space"] = $this->resolveVenue($occurrence["space"], $origin);
+            $this->createEntity(\MapasCulturais\Entities\EventOccurrence::class, $network_id, $occurrence, $origin);
+        }
         $this->sudo(function () use ($entity) {
             $entity->save(true);
             return;
@@ -1150,7 +1163,8 @@ class Plugin extends \MapasCulturais\Plugin
             "createTimestamp",
             "updateTimestamp",
             "network__occurrence_ids",
-            "network__sync_control"
+            "network__sync_control",
+            "occurrences", // handled in createEntity
         ];
         $skip_null_fields = [
             "owner",
