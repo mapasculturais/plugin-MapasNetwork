@@ -18,7 +18,6 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
     protected function _execute(Job $job)
     {
         $app = App::i();
-        $network_id = $job->networkID;
         $class_name = $job->className;
         $data = $job->data;
         $query = new \MapasCulturais\ApiQuery($job->ownerClassName, [
@@ -81,6 +80,7 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         $file->owner = $owner;
         // inform network ID to the plugin and prevent it from being created again
         $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
+        $app->user = $app->repo("User")->find($job->user);
         $file->save(true);
         return true;
     }
