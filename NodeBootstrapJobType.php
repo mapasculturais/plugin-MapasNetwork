@@ -4,6 +4,7 @@ namespace MapasNetwork;
 use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entities\Agent;
+use MapasCulturais\Entities\Event;
 use MapasCulturais\Entities\Job;
 use MapasCulturais\Entities\Space;
 
@@ -21,18 +22,18 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
     protected function _execute(Job $job)
     {
         $app = App::i();
-
         $node = $job->node;
         $user = $node->user;
-
         $allowed_metalist_groups = $this->plugin->allowedMetaListGroups;
         $file_groups = [
             "agent" => array_keys($app->getRegisteredFileGroupsByEntity(Agent::class)),
-            "space" => array_keys($app->getRegisteredFileGroupsByEntity(Space::class))
+            "event" => array_keys($app->getRegisteredFileGroupsByEntity(Event::class)),
+            "space" => array_keys($app->getRegisteredFileGroupsByEntity(Space::class)),
         ];
         $metalist_groups = [
             "agent" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Agent::class)), $allowed_metalist_groups),
-            "space" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)), $allowed_metalist_groups)
+            "event" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Event::class)), $allowed_metalist_groups),
+            "space" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)), $allowed_metalist_groups),
         ];
         $map_ids = function ($entity) { return $entity->id; };
         $map_serialize = function ($entity) use ($file_groups, $metalist_groups) {
@@ -41,31 +42,49 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
             $serialised = $this->plugin->serializeAttachments($entity, "metalists", $metalist_groups[$entity->controllerId], $serialised);
             return $serialised;
         };
-
+        // agents
         $agents_args = $node->getFilters(Agent::class);
         $agent_ids = array_map($map_ids, $user->getEnabledAgents());
-        $agents_args['id'] = 'IN(' . implode(',', $agent_ids) . ')';
+        $agents_args["id"] = "IN(" . implode(",", $agent_ids) . ")";
         $agents_query = new ApiQuery(Agent::class, $agents_args);
         $agent_ids = $agents_query->findIds();
-        $agents = $app->repo('Agent')->findBy(['id' => $agent_ids]);
-
+        $agents = $app->repo("Agent")->findBy(["id" => $agent_ids]);
+        // spaces
         $spaces_args = $node->getFilters(Space::class);
         $space_ids = array_map($map_ids, $user->getEnabledSpaces());
         if ($space_ids) {
-            $spaces_args['id'] = 'IN(' . implode(',', $space_ids) . ')';
+            $spaces_args["id"] = "IN(" . implode(",", $space_ids) . ")";
             $spaces_query = new ApiQuery(Space::class, $spaces_args);
             $space_ids = $spaces_query->findIds();
-            $spaces = $app->repo('Space')->findBy(['id' => $space_ids]);
+            $spaces = $app->repo("Space")->findBy(["id" => $space_ids]);
         } else {
             $spaces = [];
         }
-
+        // events
+        $event_ids = array_map($map_ids, $user->getEnabledEvents());
+        if ($event_ids) {
+            $query = "IN(" . implode(",", $event_ids) . ")";
+            $event_ids = (new ApiQuery(Event::class, ["id" => $query]))->findIds();
+            $events = array_filter($app->repo("Event")->findBy(["id" => $event_ids]),
+                                   function ($event) use ($node) {
+                foreach ($event->occurrences as $occurrence) {
+                    if (Plugin::checkNodeFilter($node, $occurrence->space)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        } else {
+            $events = [];
+        }
+        // POST data
         $data = [
             "nodeSlug" => $this->plugin->nodeSlug,
-            'agents' => array_map($map_serialize, $agents),
-            'spaces' => array_map($map_serialize, $spaces),
+            "agents" => array_map($map_serialize, $agents),
+            "events" => array_map($map_serialize, $events),
+            "spaces" => array_map($map_serialize, $spaces),
         ];
-        $node->api->apiPost('network-node/bootstrapSync', $data);
+        $node->api->apiPost("network-node/bootstrapSync", $data);
         return true;
     }
 
