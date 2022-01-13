@@ -1045,8 +1045,14 @@ class Node extends \MapasCulturais\Controller
         $app = App::i();
         $origin_node = $this->getRequestOriginNode();
         $inputs = [
-            ["local" => $app->user->enabledAgents, "remote" => ($this->postData["agents"] ?? []), "type" => Agent::class],
-            ["local" => $app->user->enabledSpaces, "remote" => ($this->postData["spaces"] ?? []), "type" => Space::class]
+            [
+                "local" => array_merge($app->user->enabledAgents, $app->user->draftAgents),
+                "remote" => ($this->postData["agents"] ?? []), "type" => Agent::class
+            ],
+            [
+                "local" => array_merge($app->user->enabledSpaces, $app->user->draftSpaces),
+                "remote" => ($this->postData["spaces"] ?? []), "type" => Space::class
+            ]
         ];
         foreach ($inputs as $input) {
             foreach ($input["remote"] as $foreign_data) {
