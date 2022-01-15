@@ -564,6 +564,7 @@ class Node extends \MapasCulturais\Controller
                 "className" => $class_name,
                 "ownerClassName" => $owner_class,
                 "ownerNetworkID" => $owner_network_id,
+                "ownerSourceNetworkID" => "",
                 "data" => $data
             ]);
         }

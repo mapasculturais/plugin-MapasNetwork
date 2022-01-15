@@ -25,7 +25,7 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
             "user" => "EQ({$job->user})"
         ]);
         $ids = $query->findIds();
-        if (!$ids && isset($job->ownerSourceNetworkID)) {
+        if (!$ids && ($job->ownerSourceNetworkID != "")) {
             $query = new \MapasCulturais\ApiQuery($job->ownerClassName, [
                 "network__id" => "EQ({$job->ownerSourceNetworkID})",
                 "user" => "EQ({$job->user})"
