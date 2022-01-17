@@ -37,6 +37,10 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         ];
         $map_ids = function ($entity) { return $entity->id; };
         $map_serialize = function ($entity) use ($file_groups, $metalist_groups) {
+            if (Plugin::ensureNetworkID($entity)) {
+                $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
+                Plugin::saveMetadata($entity, ["network__id"]);
+            }
             $serialised = $this->plugin->serializeEntity($entity);
             $serialised = $this->plugin->serializeAttachments($entity, "files", $file_groups[$entity->controllerId], $serialised);
             $serialised = $this->plugin->serializeAttachments($entity, "metalists", $metalist_groups[$entity->controllerId], $serialised);
@@ -45,10 +49,14 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         // agents
         $agents_args = $node->getFilters(Agent::class);
         $agent_ids = array_map($map_ids, $user->getEnabledAgents());
-        $agents_args["id"] = "IN(" . implode(",", $agent_ids) . ")";
-        $agents_query = new ApiQuery(Agent::class, $agents_args);
-        $agent_ids = $agents_query->findIds();
-        $agents = $app->repo("Agent")->findBy(["id" => $agent_ids]);
+        if ($agent_ids) { // it HAS been the case that this was reached with only a draft agent, thus the need to check
+            $agents_args["id"] = "IN(" . implode(",", $agent_ids) . ")";
+            $agents_query = new ApiQuery(Agent::class, $agents_args);
+            $agent_ids = $agents_query->findIds();
+            $agents = $app->repo("Agent")->findBy(["id" => $agent_ids]);
+        } else {
+            $agents = [];
+        }
         // spaces
         $spaces_args = $node->getFilters(Space::class);
         $space_ids = array_map($map_ids, $user->getEnabledSpaces());
@@ -69,11 +77,16 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
                                    function ($event) use ($node) {
                 foreach ($event->occurrences as $occurrence) {
                     if (Plugin::checkNodeFilter($node, $occurrence->space)) {
+                        Plugin::ensureNetworkID($occurrence, $event, "network__occurrence_ids");
                         return true;
                     }
                 }
                 return false;
             });
+            foreach ($events as $event) {
+                $this->plugin->skip($event, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
+                Plugin::saveMetadata($event, ["network__occurrence_ids"]);
+            }
         } else {
             $events = [];
         }

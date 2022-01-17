@@ -1035,16 +1035,17 @@ class Plugin extends \MapasCulturais\Plugin
         $entity = new $class_name;
         $data = $this->unserializeEntity($data);
         Plugin::convertEntityData($entity, $data);
-        foreach (($data["occurrences"] ?? []) as $occurrence) {
-            $network_id = array_search($occurrence["id"], $data["network__occurrence_ids"]);
-            $this->skip($entity, [self::SKIP_BEFORE, self::SKIP_AFTER]);
-            $occurrence["space"] = $this->resolveVenue($occurrence["space"], $origin);
-            $this->createEntity(\MapasCulturais\Entities\EventOccurrence::class, $network_id, $occurrence, $origin);
-        }
         $this->sudo(function () use ($entity) {
             $entity->save(true);
             return;
         });
+        foreach (($data["occurrences"] ?? []) as $occurrence) {
+            $network_id = array_search($occurrence["id"], $data["network__occurrence_ids"]);
+            $this->skip($entity, [self::SKIP_BEFORE, self::SKIP_AFTER]);
+            $occurrence["space"] = $this->resolveVenue($occurrence["space"], $origin);
+            $occurrence["event"] = $entity;
+            $this->createEntity(\MapasCulturais\Entities\EventOccurrence::class, $network_id, $occurrence, $origin);
+        }
         return $entity;
     }
 
