@@ -34,9 +34,26 @@ return [
                 "agent" => ["En_Estado" => "ES"],
                 "space" => ["En_Estado" => "ES"],
             ],
+            /**
+             * Slug do nó local para fins de identificação.
+             * Formato: <string>
+            */
+            "nodeSlug" => "esmapas"
         ],
     ],
 ];
 ```
 Normalmente esse arquivo de configuração fica em
 `/var/www/html/protected/application/conf/conf-common.d/plugins.php`.
+
+## Variáveis de ambiente
+
+A configuração da variável de ambiente `BASE_URL` ̣é obrigatória, pois os jobs
+dependem dessa informação em um cenário onde a variável global `$_SERVER` não
+contém os dados normalmente disponíveis para a aplicação.
+
+As seguintes variáveis são recomendadas para flexibilizar a configuração
+exemplificada na seção anterior.
+- `MAPAS_NETWORK_SLUG`
+- `MAPAS_NETWORK_NODES`
+- `MAPAS_NETWORK_STATE`

@@ -1459,9 +1459,8 @@ class Node extends \MapasCulturais\Controller
      * @param $entity A entidade local que deve receber os dados.
      * @param $foreign_data Os dados recebidos de outro nó.
      */
-    function mergeEntity(Entity $entity, array $foreign_data)
+    function mergeEntity(Entity $entity, array $foreign_data, NodeEntities\Node $origin_node)
     {
-        $origin_node = $this->getRequestOriginNode();
         $entity_updated = $entity->updateTimestamp ?? $entity->createTimestamp;
         $foreign_updated = new DateTime($foreign_data["updateTimestamp"]["date"] ?? $foreign_data["createTimestamp"]["date"]);
         $data = [];
