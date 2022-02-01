@@ -1086,11 +1086,13 @@ class Plugin extends \MapasCulturais\Plugin
                 continue;
             }
             $sdk = new MapasSDK($node_url);
-
-            $curl = $sdk->apiPost('network-node/verifyAccount', $find_data);
-
-            if ($curl->response) {
-                $responses[] = $node_url;
+            try {
+                $curl = $sdk->apiPost("network-node/verifyAccount", $find_data);
+                if ($curl->response) {
+                    $responses[] = $node_url;
+                }
+            } catch (\MapasSDK\Exceptions\Exception $e) {
+                $app->log->error("Failed to contact $node_url to check accounts.");
             }
         }
         return $responses;
