@@ -1058,9 +1058,26 @@ class Node extends \MapasCulturais\Controller
                     }
                 }
                 if (!$linked) {
+                    // attachments also require special treatment when creating the entity anew
+                    $files = $foreign_data["files"] ?? null;
+                    unset($foreign_data["files"]);
+                    $metalists = $foreign_data["metalists"] ?? null;
+                    unset($foreign_data["metalists"]);
                     $metakey = $origin_node->entityMetadataKey;
                     $foreign_data[$metakey] = $foreign_data["id"];
-                    $this->plugin->createEntity($input["type"], $foreign_data["network__id"], $foreign_data, $origin_node);
+                    $new_entity = $this->plugin->createEntity($input["type"], $foreign_data["network__id"], $foreign_data, $origin_node);
+                    $save = false;
+                    if ($files) {
+                        $this->bootstrapFiles($new_entity, $files, $foreign_data, $origin_node);
+                        $save = true;
+                    }
+                    if ($metalists) {
+                        $this->bootstrapMetaLists($new_entity, $metalists, $foreign_data);
+                        $save = true;
+                    }
+                    if ($save) {
+                        $entity->save(true);
+                    }
                 }
             }
         }
@@ -1182,9 +1199,13 @@ class Node extends \MapasCulturais\Controller
                 $this->enqueueResyncDownload($node, $entity, $network_ids_key, $network_id, $foreign_entity, $group_data);
             } else {
                 foreach ($group_data as $file) {
-                    if (count(array_filter(($entity->files[$group] ?? []), function ($item) use ($file) {
+                    if (!empty($entity->files[$group]) &&
+                        (count(array_filter($entity->files[$group], function ($item) use ($file) {
+                        if (is_array($item)) {
+                            $item = (object) $item;
+                        }
                         return ($item->md5 == $file["md5"]);
-                    })) > 0) {
+                    })) > 0)) {
                         continue;
                     }
                     $network_id = array_search($file["id"], $foreign_entity[$network_ids_key]);
@@ -1210,11 +1231,18 @@ class Node extends \MapasCulturais\Controller
             $revisions[] = end($foreign_entity[$revision_key]);
             $entity->$revision_key = $revisions;
             foreach ($group_data as $list_item) {
-                if (count(array_filter(($entity->metalists[$group] ?? []), function ($item) use ($list_item) {
+                if (!empty($entity->metalists[$group]) &&
+                    (count(array_filter($entity->metalists[$group], function ($item) use ($list_item) {
+                    if (is_array($item)) {
+                        if (!isset($item["description"])) {
+                            $item["description"] = null;
+                        }
+                        $item = (object) $item;
+                    }
                     return (($item->title == ($list_item["title"] ?? null)) &&
                             ($item->value == ($list_item["value"] ?? null)) &&
                             ($item->description == ($list_item["description"] ?? null)));
-                })) > 0) {
+                })) > 0)) {
                     continue;
                 }
                 $network_id = array_search($list_item["id"], $foreign_entity[$network_ids_key]);
