@@ -191,26 +191,24 @@ class Node extends \MapasCulturais\Entity
 
     /**
      * Retorna a configuração de filtros do nó
-     * 
-     * @param string $entity 
+     *
+     * @param string $entity
      * @return array
      */
-    public function getFilters(string $entity) {
-        $entity = strtolower($entity);
-        
+    public function getFilters(string $entity)
+    {
+        // alternatively, use a fully qualified name in the configuration
+        $entity = explode("\\", $entity);
+        $entity = strtolower(end($entity));
         $app = App::i();
-        $cache_key = $this->url . ':filters';
-
+        $cache_key = "{$this->url}:filters";
         if ($app->cache->contains($cache_key)) {
             $filters = $app->cache->fetch($cache_key);
         } else {
-            $response = $this->api->apiGet('network-node/filters');
-
+            $response = $this->api->apiGet("network-node/filters");
             $filters = $response->response ?? [];
-
-            $app->cache->save($cache_key, $filters, 30 * MINUTE_IN_SECONDS);
+            $app->cache->save($cache_key, $filters, (30 * MINUTE_IN_SECONDS));
         }
-
         return (array) ($filters->$entity ?? []);
     }
 

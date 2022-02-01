@@ -48,6 +48,10 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         };
         // agents
         $agents_args = $node->getFilters(Agent::class);
+        foreach ($agents_args as $key => &$val) {
+            $val = "IN($val)";
+        }
+        $app->log->info("Bootstrap - agents: " . json_encode($agents_args));
         $agent_ids = array_map($map_ids, $user->getEnabledAgents());
         if ($agent_ids) { // it HAS been the case that this was reached with only a draft agent, thus the need to check
             $agents_args["id"] = "IN(" . implode(",", $agent_ids) . ")";
@@ -59,6 +63,10 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         }
         // spaces
         $spaces_args = $node->getFilters(Space::class);
+        foreach ($spaces_args as $key => &$val) {
+            $val = "IN($val)";
+        }
+        $app->log->info("Bootstrap - spaces: " . json_encode($spaces_args));
         $space_ids = array_map($map_ids, $user->getEnabledSpaces());
         if ($space_ids) {
             $spaces_args["id"] = "IN(" . implode(",", $space_ids) . ")";
