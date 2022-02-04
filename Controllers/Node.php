@@ -119,7 +119,21 @@ class Node extends \MapasCulturais\Controller
         }
         $entity->checkPermission("delete"); // UserApp has soft-delete, so we'll use the Node logic instead
         if (isset($this->data["id"])) { // propagate the request via API
-            $entity->api->apiDelete("{$this->id}/single", []);
+            try {
+                $entity->api->apiDelete("{$this->id}/single", []);
+            } catch (\MapasSDK\Exceptions\Exception $e) {
+                $app->log->info("Exception trying to delete node from {$entity->slug}.");
+                if ($app->request->isAjax()) {
+                    $this->json(false);
+                } else {
+                    $redirect_url = $app->request->getReferrer();
+                    if ($redirect_url === $entity->singleUrl) {
+                        $redirect_url = $app->createUrl("panel");
+                    }
+                    $app->redirect($redirect_url);
+                }
+                return;
+            }
         }
         $single_url = $entity->singleUrl;
         Plugin::sudo(function () use ($entity) {
@@ -130,7 +144,7 @@ class Node extends \MapasCulturais\Controller
             $this->json(true);
         } else {
             // e redireciona de volta para o referer
-            $redirect_url = $app->request->getReferer();
+            $redirect_url = $app->request->getReferrer();
             if ($redirect_url === $single_url) {
                 $redirect_url = $app->createUrl("panel");
             }
