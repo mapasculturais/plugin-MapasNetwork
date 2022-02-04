@@ -57,9 +57,13 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
             $agents_args["id"] = "IN(" . implode(",", $agent_ids) . ")";
             $agents_query = new ApiQuery(Agent::class, $agents_args);
             $agent_ids = $agents_query->findIds();
+            // the profile agent is always propagated
+            if (!in_array($user->profile->id, $agent_ids)) {
+                $agent_ids[] = $user->profile->id;
+            }
             $agents = $app->repo("Agent")->findBy(["id" => $agent_ids]);
         } else {
-            $agents = [];
+            $agents = [$user->profile];
         }
         // spaces
         $spaces_args = $node->getFilters(Space::class);
