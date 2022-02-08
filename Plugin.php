@@ -763,6 +763,9 @@ class Plugin extends \MapasCulturais\Plugin
         } else if ($value instanceof \JsonSerializable) {
             $value = $value->jsonSerialize();
         }
+        if (is_array($value)) {
+            unset($value["subsite"]);
+        }
         return $value;
     }
 
