@@ -545,6 +545,9 @@ class Plugin extends \MapasCulturais\Plugin
      */
     static function checkNodeFilter(Entities\Node $node, Entity $entity)
     {
+        if (($entity instanceof \MapasCulturais\Entities\Agent) && ($entity->ownerUser->profile->id == $entity->id)) {
+            return true;
+        }
         $filters = $node->getFilters($entity->entityType);
         foreach ($filters as &$value) {
             if (is_array($value)) {
@@ -873,8 +876,9 @@ class Plugin extends \MapasCulturais\Plugin
     static function foreachEntityNodeDo($entity, Closure $cb)
     {
         $nodes = Plugin::getEntityNodes($entity->owner);
+        $target = $entity->usesMetadata() ? $entity : $entity->owner;
         foreach ($nodes as $node) {
-            if (Plugin::checkNodeFilter($node, $entity->owner) || ($entity->{$node->entityMetadataKey} ?? 0)) {
+            if (Plugin::checkNodeFilter($node, $entity->owner) || ($target->{$node->entityMetadataKey} ?? 0)) {
                 $cb($node, $entity);
             }
         }
