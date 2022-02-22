@@ -849,7 +849,7 @@ class Plugin extends \MapasCulturais\Plugin
         $entity->owner->save(true);
         $nodes = Plugin::getEntityNodes($entity->owner);
         foreach ($nodes as $node) {
-            if (Plugin::checkNodeFilter($node, $entity->owner)) {
+            if (Plugin::checkNodeFilter($node, $entity->owner) || ($entity->owner->{$node->entityMetadataKey} ?? 0)) {
                 $app->enqueueJob(self::JOB_SLUG_DELETION, [
                     "syncAction" => $action,
                     "entity" => $entity->jsonSerialize(),
