@@ -199,18 +199,9 @@ class Node extends \MapasCulturais\Entity
         $entity = strtolower($entity);
         
         $app = App::i();
-        $cache_key = $this->url . ':filters';
-
-        if ($app->cache->contains($cache_key)) {
-            $filters = $app->cache->fetch($cache_key);
-        } else {
-            $response = $this->api->apiGet('network-node/filters');
-
-            $filters = $response->response ?? [];
-
-            $app->cache->save($cache_key, $filters, 30 * MINUTE_IN_SECONDS);
-        }
-
+        
+        $filters = Plugin::getNodeFilters($this->url);
+        
         return (array) ($filters->$entity ?? []);
     }
 

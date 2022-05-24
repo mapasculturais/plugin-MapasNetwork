@@ -35,11 +35,11 @@ class SyncFileJobType extends \MapasCulturais\Definitions\JobType
             "data" => $this->plugin->serializeEntity($entity)
         ];
         try {
-            $app->log->info("SYNC: $entity -> {$node->url}");
+            Plugin::log("SYNC: $entity -> {$node->url}");
             $node->api->apiPost("network-node/{$action}", $data, [],
                                 [CURLOPT_TIMEOUT => 30]);
         } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
-            $app->log->debug($e->getMessage());
+            Plugin::log($e->getMessage());
             return false;
         }
         return true;

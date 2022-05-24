@@ -33,7 +33,7 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
             $ids = $query->findIds();
         }
         if (!$ids) {
-            $app->log->info("Download task for {$data["url"]} cannot find " .
+            Plugin::log("Download task for {$data["url"]} cannot find " .
                             "owner of class {$job->ownerClassName} with " .
                             "network ID {$job->ownerNetworkID} and user " .
                             "{$job->user}.");
@@ -41,31 +41,34 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         }
         $id = $ids[0];
         $owner = $app->repo($job->ownerClassName)->find($id);
-        if ($app->config["network.fixNodeURLs"] ?? false) {
-            $app->log->info("network.fixNodeURLs is enabled");
-            $orig_host = parse_url($data["url"], PHP_URL_HOST);
-            $host = parse_url($job->node->url);
-            $data["url"] = implode($host, explode($orig_host, $data["url"], 2));
-        }
-        $app->log->info("DOWNLOAD: {$data["url"]}");
+        // if ($app->config["network.fixNodeURLs"] ?? false) {
+        //     Plugin::log("network.fixNodeURLs is enabled");
+        //     $orig_host = parse_url($data["url"], PHP_URL_HOST);
+        //     $host = parse_url($job->node->url);
+        //     $data["url"] = implode($host, explode($orig_host, $data["url"], 2));
+        // }
+        $basename = basename($data["url"]);
+        $data["url"] = str_replace($basename, urlencode($basename), $data["url"]);
+        Plugin::log("DOWNLOAD: {$data["url"]}");
         $ch = curl_init($data["url"]);
         $tmp = tempnam("/tmp", "");
         $handle = fopen($tmp, "wb");
+
         curl_setopt($ch, CURLOPT_FILE, $handle);
         if (!curl_exec($ch)) {
             fclose($handle);
             unlink($tmp);
-            $app->log->info("Error downloading from {$data["url"]}.");
+            Plugin::log("Error downloading from {$data["url"]}.");
             return false;
         }
         curl_close($ch);
         $sz = ftell($handle);
         fclose($handle);
-        if (md5_file($tmp) != $data["md5"]) {
-            $app->log->info("Download from {$data["url"]} is corrupt.");
-            unlink($tmp);
-            return false;
-        }
+        // if (md5_file($tmp) != $data["md5"]) {
+        //     Plugin::log("Download from {$data["url"]} is corrupt.");
+        //     unlink($tmp);
+        //     return false;
+        // }
         $file = new $class_name([
             "name" => $data["name"],
             "type" => $data["mimeType"],
@@ -81,6 +84,13 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         // inform network ID to the plugin and prevent it from being created again
         $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
         $app->user = $app->repo("User")->find($job->user);
+
+        $definition = $app->getRegisteredFileGroup($owner->controllerId, $file->group);
+        
+        if ($definition->unique && ($current_file = $owner->files[$file->group] ?? null)) {
+            $current_file->delete(true);
+        }
+
         $file->save(true);
         return true;
     }

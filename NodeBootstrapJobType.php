@@ -23,6 +23,7 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
     {
         $app = App::i();
         $node = $job->node;
+
         $user = $node->user;
         $allowed_metalist_groups = $this->plugin->allowedMetaListGroups;
         $file_groups = [
@@ -47,18 +48,21 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
             return $serialised;
         };
         // agents
-        $agents_args = $node->getFilters(Agent::class);
+        $agents_args = Plugin::parseFilters($node->getFilters('agent'));
         $agent_ids = array_map($map_ids, $user->getEnabledAgents());
         if ($agent_ids) { // it HAS been the case that this was reached with only a draft agent, thus the need to check
             $agents_args["id"] = "IN(" . implode(",", $agent_ids) . ")";
             $agents_query = new ApiQuery(Agent::class, $agents_args);
             $agent_ids = $agents_query->findIds();
+            if(!in_array($user->profile->id, $agent_ids)) {
+                $agent_ids[] = $user->profile->id;
+            }
             $agents = $app->repo("Agent")->findBy(["id" => $agent_ids]);
         } else {
             $agents = [];
         }
         // spaces
-        $spaces_args = $node->getFilters(Space::class);
+        $spaces_args = Plugin::parseFilters($node->getFilters('space'));
         $space_ids = array_map($map_ids, $user->getEnabledSpaces());
         if ($space_ids) {
             $spaces_args["id"] = "IN(" . implode(",", $space_ids) . ")";

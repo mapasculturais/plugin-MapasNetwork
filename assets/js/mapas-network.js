@@ -19,12 +19,12 @@ $(function () {
         return;
     });
 
-    $(".objeto-meta .js-sync-switch input").change(function (e) {
+    $(".mapas-network--panel-switch .js-sync-switch input").change(function (e) {
         var q = $(e.target);
         const value = q.is(":checked");
         q.prop("disabled", true);
         $.post(MapasCulturais.createUrl("network-node", "syncControl"), {
-            "network__id": q.closest(".objeto-meta").children(".mned-network-id").val(),
+            "network__id": $(this).data("mned-network-id"),
             "value": value,
         }).done(function() {
             const message = value ? MapasCulturais.gettext.pluginMapasNetwork.syncEnabled :

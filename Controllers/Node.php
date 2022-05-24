@@ -181,7 +181,9 @@ class Node extends \MapasCulturais\Controller
     }
 
     function GET_filters() {
-        $this->json($this->plugin->config['filters']);
+        $filters = $this->plugin->config['filters'];
+
+        $this->json($filters);
     }
 
     /**
@@ -202,14 +204,14 @@ class Node extends \MapasCulturais\Controller
                 if ($return_token) {
                     $app->cache->save("{$token}:returnToken", $return_token, 300);
                 }
-                $app->log->debug("token válido: {$token}");
+                Plugin::log("token válido: {$token}");
                 $app->halt(200, $secret);
             } else {
-                $app->log->debug("secret não encontrado: {$token}");
+                Plugin::log("secret não encontrado: {$token}");
                 $app->cache->delete("{$token}:verifier");
             }
         } else {
-            $app->log->debug("token inválido: {$token}");
+            Plugin::log("token inválido: {$token}");
         }
     }
 
@@ -257,7 +259,7 @@ class Node extends \MapasCulturais\Controller
                 $user_app->name = i::__('Rede Mapas') . ": {$name} ({$connect_to})";
                 $user_app->save(true);
 
-                $app->log->debug("user app criado: {$user_app->name}");
+                Plugin::log("user app criado: {$user_app->name}");
 
                 $app->cache->save("{$connect_token}:userAppId", $user_app->id, 300);
 
@@ -403,7 +405,7 @@ class Node extends \MapasCulturais\Controller
             $entity = $app->repo($class_name)->find($id);
             $entity->{$node->entityMetadataKey} = $data["id"];
             $entity->save(true);
-            $app->log->debug("$network_id already exists with id {$id}");
+            Plugin::log("$network_id already exists with id {$id}");
             $this->json("$network_id already exists with id {$id}");
             return;
         } else { // tries to locate the entity among existing entities to link
@@ -425,7 +427,7 @@ class Node extends \MapasCulturais\Controller
                         ]);
                     }
                     $local->save(true);
-                    $app->log->debug("LINKED: {$local} => {$local->network__id}");
+                    Plugin::log("LINKED: {$local} => {$local->network__id}");
                     return;
                 }
             }
@@ -452,7 +454,7 @@ class Node extends \MapasCulturais\Controller
         $data = $this->postData["data"];
         $network_id = $data["network__id"];
         $node = $this->getRequestOriginNode();
-        $app->log->debug("createdEventOccurrence: $network_id");
+        Plugin::log("createdEventOccurrence: $network_id");
         if (isset($data[$this->plugin->entityMetadataKey])) {
             $this->json("ok");
             return;
@@ -471,21 +473,24 @@ class Node extends \MapasCulturais\Controller
              */
             $entity = $app->repo($class_name)->find($id);
             $entity->{$node->entityMetadataKey} = $data["id"];
-            $event->{$node->entityMetadataKey} = $data["event"]["id"];
+            
+            $event->{$node->entityMetadataKey} = $event->id;
             $event->save(true);
             Plugin::sudo(function () use ($entity) {
                 $entity->save(true); // this is an existing, authorised occurrence, but without "sudo" it'll generate a request to save
                 return;
             });
-            $app->log->debug("$network_id already exists with id {$id}");
+            Plugin::log("$network_id already exists with id {$id}");
             $this->json("$network_id already exists with id {$id}");
             return;
         }
         // unlike event, space comes as embedded data, so we still need to look for the entity
-        $space = $this->plugin->unserializeEntity($data["space"]);
-        $space_entity = $this->plugin->resolveVenue($space, $node);
+        $space_entity = $this->plugin->unserializeEntity($data["space"]);
+        if(is_array($space_entity)) { 
+            $space_entity = $this->plugin->resolveVenue($space_entity, $node);
+        }
         $data["space"] = "@entity:{$space_entity->network__id}";
-        if ($event && $space) {
+        if ($event && $space_entity) {
             $data = $this->plugin->unserializeEntity($data);
             $plugin = $this->plugin;
             Plugin::sudo(function () use ($class_name, $data, $event, $network_id, $node, $plugin) {
@@ -833,7 +838,8 @@ class Node extends \MapasCulturais\Controller
         $class_name = $this->postData["className"];
         $network_id = $this->postData["network__id"];
         $data = $this->postData["data"];
-        $revision_id = end($data["network__revisions"]);
+        $revisions = $data["network__revisions"] ?? [];
+        $revision_id = end($revisions);
         $classes = [
             Agent::class,
             Event::class,
@@ -870,6 +876,7 @@ class Node extends \MapasCulturais\Controller
             $entity->network__revisions = $revisions;
             $this->writeEntityFields($entity, $data);
             $this->plugin->skip($entity, [Plugin::SKIP_BEFORE]);
+            
             $entity->save(true);
         }
         return;
@@ -897,26 +904,26 @@ class Node extends \MapasCulturais\Controller
         // unlike event, space comes as embedded data, so we still need to look for the entity
         $space = $this->plugin->unserializeEntity($data["space"]);
         $node = $this->getRequestOriginNode();
-        $space_entity = $this->plugin->getEntityByNetworkId($space["network__id"]);
+        $space_entity = $this->plugin->getEntityByNetworkId($space->network__id);
         if (!$space_entity) {
-            if (!$space["owner"]) {
+            if (!$space->owner) {
                 $id = Plugin::getProxyUserIDForNode($node->slug);
                 if (!$id) {
                     throw new \Exception("The proxy user for {$node->slug} does not exist.");
                 }
                 $proxy_user = $app->repo("User")->find($id);
-                $space["owner"] = $proxy_user->profile;
-                $space["network__proxied_owner"] = $data["space"]["owner"];
+                $space->owner = $proxy_user->profile;
+                $space->network__proxied_owner = $data["space"]["owner"];
             }
             $plugin = $this->plugin;
             // the space's owner isn't necessarily the event's owner so this must be sudone
             Plugin::sudo(function () use ($node, $plugin, $space) {
-                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space["network__id"]), $space["network__id"], $space, $node);
+                $space_entity = $plugin->createEntity(Plugin::getClassFromNetworkID($space->network__id), $space->network__id, $space, $node);
                 $space_entity->save(true);
                 return;
             });
         }
-        $data["space"] = "@entity:{$space["network__id"]}";
+        $data["space"] = "@entity:{$space->network__id}";
         $data = $this->plugin->unserializeEntity($data);
         Plugin::sudo(function () use ($app, $class_name, $data, $network_id, $revisions) {
             $event = $data["event"];
@@ -1027,23 +1034,21 @@ class Node extends \MapasCulturais\Controller
         $app = App::i();
         $origin_node = $this->getRequestOriginNode();
         $inputs = [
-            [
+            Agent::class => [
                 "local" => array_merge($app->user->enabledAgents, $app->user->draftAgents),
                 "remote" => ($this->postData["agents"] ?? []),
-                "type" => Agent::class,
             ],
-            [
-                "local" => array_merge($app->user->enabledEvents, $app->user->draftEvents),
-                "remote" => ($this->postData["events"] ?? []),
-                "type" => Event::class,
-            ],
-            [
+            Space::class => [
                 "local" => array_merge($app->user->enabledSpaces, $app->user->draftSpaces),
                 "remote" => ($this->postData["spaces"] ?? []),
-                "type" => Space::class,
-            ]
+            ],
+            Event::class => [
+                "local" => array_merge($app->user->enabledEvents, $app->user->draftEvents),
+                "remote" => ($this->postData["events"] ?? []),
+            ],
         ];
-        foreach ($inputs as $input) {
+
+        foreach ($inputs as $class => $input) {
             foreach ($input["remote"] as $foreign_data) {
                 $linked = false;
                 foreach ($input["local"] as $entity) {
@@ -1054,13 +1059,14 @@ class Node extends \MapasCulturais\Controller
                         $this->writeEntityFields($entity, $data);
                         $this->verifyAndUpdateNetworkId($entity, $foreign_data);
                         $entity->save(true);
-                        $app->log->debug("LINKED: {$entity} => {$entity->network__id}");
+                        Plugin::log("LINKED: {$entity} => {$entity->network__id}");
                     }
                 }
                 if (!$linked) {
                     $metakey = $origin_node->entityMetadataKey;
                     $foreign_data[$metakey] = $foreign_data["id"];
-                    $this->plugin->createEntity($input["type"], $foreign_data["network__id"], $foreign_data, $origin_node);
+                    $entity = $this->plugin->createEntity($class, $foreign_data["network__id"], $foreign_data, $origin_node);
+                    $this->mergeEntity($entity, $foreign_data);
                 }
             }
         }
@@ -1096,7 +1102,7 @@ class Node extends \MapasCulturais\Controller
             $this->plugin->skip($entity, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
             $entity->network__id = $new_network__id;
             $entity->save(true);
-            $app->log->debug("UPDATED: {$entity} => {$entity->network__id}");
+            Plugin::log("UPDATED: {$entity} => {$entity->network__id}");
             $skip_node = $this->getRequestOriginNode();
             $app->enqueueJob(Plugin::JOB_UPDATE_NETWORK_ID, [
                 "entity" => $entity,
@@ -1470,7 +1476,11 @@ class Node extends \MapasCulturais\Controller
             if (in_array($key, ["network__id", "createTimestamp", "updateTimestamp", "network__revisions"])) {
                 continue;
             }
-            if ($val == $entity->$key) {
+            $_val = $entity->$key;
+            if($key == 'type') {
+                $_val = $_val->id;
+            }
+            if ($val == $_val) {
                 continue;
             }
             if ($key == "files") {
@@ -1480,7 +1490,7 @@ class Node extends \MapasCulturais\Controller
                 $this->bootstrapMetaLists($entity, $val, $foreign_data);
                 continue;
             }
-            if ($val && $entity->$key) {
+            if ($val && $_val) {
                 // se a informação local é mais nova que a informação que veio no request
                 // @todo: o ideal é verificar no histórico de revisões a data que foi preenchida a info
                 if ($entity_updated <= $foreign_updated) {

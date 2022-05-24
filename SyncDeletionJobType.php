@@ -29,7 +29,7 @@ class SyncDeletionJobType extends \MapasCulturais\Definitions\JobType
             $job->revisions_key => $job->revisions,
         ];
         try {
-            $app->log->info("SYNC: {$job->className}:{$job->entity["id"]} " .
+            Plugin::log("SYNC: {$job->className}:{$job->entity["id"]} " .
                             "-> {$node->url}");
             $node->api->apiPost("network-node/{$job->syncAction}", $data, [],
                                 [CURLOPT_TIMEOUT => 30]);
@@ -42,7 +42,7 @@ class SyncDeletionJobType extends \MapasCulturais\Definitions\JobType
                 $entity->save(true);
             }
         } catch (\MapasSDK\Exceptions\UnexpectedError $e) {
-            $app->log->debug($e->getMessage());
+            Plugin::log($e->getMessage());
             return false;
         }
         return true;

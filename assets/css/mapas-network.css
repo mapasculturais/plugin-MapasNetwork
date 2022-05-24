@@ -255,3 +255,7 @@
     transition: all .3s;
     margin: 10px 0 10px 0;
 }
+
+.mapas-network--panel-switch {
+    float: right;
+}

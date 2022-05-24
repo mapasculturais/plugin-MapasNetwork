@@ -27,7 +27,7 @@ class SyncEventJobType extends \MapasCulturais\Definitions\JobType
             ]);
             $ids = $query->findIds();
             if (empty($ids)) {
-                $app->log->info("Node {$job->node->slug} has no proxy user.");
+                Plugin::log("Node {$job->node->slug} has no proxy user.");
                 return false;
             }
             $user = $app->repo("User")->find($ids[0]);
