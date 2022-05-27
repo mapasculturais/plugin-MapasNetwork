@@ -1542,8 +1542,9 @@ class Plugin extends \MapasCulturais\Plugin
      */
     static function log(string $message, string $level = 'debug') {
         $app = App::i();
-        if ($app->config['plugin.MapasNetwork.log'] ?? false) {
-            ($app->log->$level)($message);
+
+        if ($app->_config['plugin.MapasNetwork.log'] ?? false) {
+            $app->log->$level($message);
         }
     }
 }
