@@ -255,23 +255,33 @@ class Plugin extends \MapasCulturais\Plugin
         /**
          * Atualização das entidades
          */
-        $app->hook("entity(<<Agent|Event|Space>>).update:before", function () use ($plugin) {
-            /** @var Entity $this */
+        $app->hook("entity(<<Agent|Event|Space>>).update:before,entity(<<Agent|Event|Space>>).meta(<<*>>).update:before,-entity(<<agent|event|space>>).meta(network<<*>>).update:before", function () use ($plugin, $app) {
+            /** @var Entity $entity */
+            if(strpos($this->className,'Meta') > 0 ) {
+                $entity = $this->owner;
+            } else {
+                $entity = $this;
+            }
             if ($plugin->shouldSkip($this, self::SKIP_BEFORE)) {
                 return;
             }
             Plugin::ensureNetworkID($this);
             $uid = uniqid("", true);
-            $revisions = $this->network__revisions;
-            $revisions[] = "{$this->networkRevisionPrefix}:{$uid}";
-            $this->network__revisions = $revisions;
+            $revisions = $entity->network__revisions;
+            $revisions[] = "{$entity->networkRevisionPrefix}:{$uid}";
+            $entity->network__revisions = $revisions;
         });
-        $app->hook("entity(<<Agent|Event|Space>>).update:finish", function () use ($plugin) {
-            /** @var Entity $this */
-            if ($plugin->shouldSkip($this, self::SKIP_AFTER)) {
+        $app->hook("entity(<<Agent|Event|Space>>).update:finish,entity(<<Agent|Event|Space>>).meta(<<*>>).update:after,-entity(<<agent|event|space>>).meta(network<<*>>).update:after", function () use ($plugin) {
+            /** @var Entity $entity */
+            if(strpos($this->className,'Meta') > 0 ) {
+                $entity = $this->owner;
+            } else {
+                $entity = $this;
+            }
+            if ($plugin->shouldSkip($entity, self::SKIP_AFTER)) {
                 return;
             }
-            $plugin->syncEntity($this, "updatedEntity");
+            $plugin->syncEntity($entity, "updatedEntity");
         },1000);
 
         /**
