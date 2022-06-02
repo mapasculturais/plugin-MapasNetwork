@@ -596,16 +596,18 @@ class Node extends \MapasCulturais\Controller
         // obtain the owner entity
         if ($id = $this->findEntityId($owner_class, $owner_network_id)) {
             $owner = $app->repo($owner_class)->find($id);
-            $revisions = $owner->network__metalist_revisions ?: [];
-            $revisions[] = $revision_id;
-            $owner->network__metalist_revisions = $revisions;
-            $owner->network__metalist_ids = $owner->network__metalist_ids ?: (object) [];
             $_netids = $owner->network__metalist_ids;
             if (isset($_netids->$network_id) ||
                 in_array($revision_id, $owner->network__metalist_revisions)) {
+                Plugin::log("METALIST $network_id $revision_id already exists");
+
                 $this->json("$network_id $revision_id already exists");
                 return;
             }
+
+            $revisions = $owner->network__metalist_revisions ?: [];
+            $revisions[] = $revision_id;
+            $owner->network__metalist_revisions = $revisions;
             
             // create the item and associate it to the owner
             $new_item = new $class_name();
@@ -616,14 +618,17 @@ class Node extends \MapasCulturais\Controller
             if (isset($data["description"])) {
                 $new_item->description = $data["description"];
             }
-            // save the new entry's network ID (as placeholder)
-            $network_ids = (array) $owner->network__metalist_ids;
-            $network_ids[$network_id] = Plugin::UNKNOWN_ID;
-            $owner->network__metalist_ids = $network_ids;
+
+            $app->hook("entity(<<Agent|Event|Space>>).file(<<*>>).metalist:after", function () use($new_item, $network_id) {
+                if ($this == $new_item) {
+                    $value = $this->owner->network__metalist_ids ?: (object)[];
+                    $value->$network_id = $this->id;
+                    $this->owner->network__metalist_ids = $value;
+                }
+            }, -10);
+
             // stop network and revision IDs from being created again
             $this->plugin->skip($new_item, [Plugin::SKIP_REVISION]);
-            // both owner and new entry must be saved since the IDs are kept in the owner
-            
             $new_item->save(true);
         }
         return;
