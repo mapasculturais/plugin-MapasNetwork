@@ -17,21 +17,20 @@ class SyncFileJobType extends \MapasCulturais\Definitions\JobType
 
     protected function _execute(Job $job)
     {
-        $app = App::i();
         $action = $job->syncAction;
         $entity = $job->entity;
-        $group = $entity->group;
         $node = $job->node;
-        $revisions_key = "network__revisions_files_$group";
-        $ids_key = "network__ids_files_$group";
-        $network_id = array_search($entity->id, (array) $entity->owner->$ids_key);
+        $network_id = array_search($entity->id, (array) $entity->owner->network__file_ids);
+        if(!$network_id) {
+            return false;
+        }
         $data = [
             "nodeSlug" => $this->plugin->nodeSlug,
             "ownerClassName" => $entity->owner->className,
             "ownerNetworkID" => $entity->owner->network__id,
             "className" => $entity->className,
             "network__id" => $network_id,
-            $revisions_key => $entity->owner->$revisions_key,
+            "network__file_revisions" => $entity->owner->network__file_revisions,
             "data" => $this->plugin->serializeEntity($entity)
         ];
         try {

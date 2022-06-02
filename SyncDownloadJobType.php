@@ -3,6 +3,8 @@ namespace MapasNetwork;
 
 use MapasCulturais\App;
 use MapasCulturais\Entities\Job;
+use MapasCulturais\Entity;
+use MapasNetwork\Entities\Node;
 
 class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
 {
@@ -15,42 +17,57 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         return;
     }
 
-    protected function _execute(Job $job)
-    {
+    protected function _execute(Job $job) {
         $app = App::i();
-        $class_name = $job->className;
-        $data = $job->data;
-        $query = new \MapasCulturais\ApiQuery($job->ownerClassName, [
-            "network__id" => "EQ({$job->ownerNetworkID})",
-            "user" => "EQ({$job->user})"
-        ]);
-        $ids = $query->findIds();
-        if (!$ids && ($job->ownerSourceNetworkID != "")) {
-            $query = new \MapasCulturais\ApiQuery($job->ownerClassName, [
-                "network__id" => "EQ({$job->ownerSourceNetworkID})",
-                "user" => "EQ({$job->user})"
-            ]);
-            $ids = $query->findIds();
+        $plugin = $this->plugin;
+
+        $app->user = $app->repo("User")->find($job->user);
+        $foreign_data = $job->foreign_data;
+        $foreign_entity = $job->foreign_entity;
+        $owner = $job->owner; 
+
+        $file_groups = array_keys($app->getRegisteredFileGroupsByEntity($owner));
+        foreach ($foreign_data as $group => $group_data) {
+            if (!in_array($group, $file_groups)) {
+                continue;
+            }
+
+            if (isset($group_data["id"])) {
+                $network_file_id = array_search($group_data['id'], $foreign_entity['network__file_ids']);
+                $this->downloadFile($owner, $network_file_id, $group_data);
+            } else {
+                foreach ($group_data as $file_data) {
+                    $entity_files = $owner->files;
+                    // se já existe um arquivo com o mesmo md5 no mesmo grupo, pula
+                    if (count(array_filter(($entity_files[$group] ?? []), function ($item) use ($file_data) {
+                        return ($item->md5 == $file_data["md5"]);
+                    })) > 0) {
+                        continue;
+                    }
+                    $network_file_id = array_search($file_data["id"], $foreign_entity['network__file_ids']);
+                    $this->downloadFile($owner, $network_file_id, $file_data);
+                }
+            }
         }
-        if (!$ids) {
-            Plugin::log("Download task for {$data["url"]} cannot find " .
-                            "owner of class {$job->ownerClassName} with " .
-                            "network ID {$job->ownerNetworkID} and user " .
-                            "{$job->user}.");
-            return false;
-        }
-        $id = $ids[0];
-        $owner = $app->repo($job->ownerClassName)->find($id);
-        // if ($app->config["network.fixNodeURLs"] ?? false) {
-        //     Plugin::log("network.fixNodeURLs is enabled");
-        //     $orig_host = parse_url($data["url"], PHP_URL_HOST);
-        //     $host = parse_url($job->node->url);
-        //     $data["url"] = implode($host, explode($orig_host, $data["url"], 2));
-        // }
-        $basename = basename($data["url"]);
-        $data["url"] = str_replace($basename, urlencode($basename), $data["url"]);
-        Plugin::log("DOWNLOAD: {$data["url"]}");
-        $ch = curl_init($data["url"]);
+
+
+        $plugin->skip($owner, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
+        $owner->save(true);
+
+        return true;
+    }
+
+    protected function downloadFile(Entity $owner, string $network_file_id, $file_data)
+    {
+        $plugin = $this->plugin;
+        $app = App::i();
+
+        $basename = basename($file_data["url"]);
+        $file_data["url"] = str_replace($basename, urlencode($basename), $file_data["url"]);
+
+        Plugin::log("DOWNLOAD: {$file_data["url"]}");
+
+        $ch = curl_init($file_data["url"]);
         $tmp = tempnam("/tmp", "");
         $handle = fopen($tmp, "wb");
 
@@ -58,40 +75,47 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         if (!curl_exec($ch)) {
             fclose($handle);
             unlink($tmp);
-            Plugin::log("Error downloading from {$data["url"]}.");
+            Plugin::log("Error downloading from {$file_data["url"]}.");
             return false;
         }
         curl_close($ch);
         $sz = ftell($handle);
         fclose($handle);
-        // if (md5_file($tmp) != $data["md5"]) {
-        //     Plugin::log("Download from {$data["url"]} is corrupt.");
-        //     unlink($tmp);
-        //     return false;
-        // }
+
+        $class_name = $owner->fileClassName;
         $file = new $class_name([
-            "name" => $data["name"],
-            "type" => $data["mimeType"],
+            "name" => $file_data["name"],
+            "type" => $file_data["mimeType"],
             "tmp_name" => $tmp,
             "error" => 0,
             "size" => $sz
         ]);
-        if (isset($data["description"])) {
-            $file->description = $data["description"];
+        if (isset($file_data["description"])) {
+            $file->description = $file_data["description"];
         }
-        $file->group = $data["group"];
+        $file->group = $file_data["group"];
         $file->owner = $owner;
-        // inform network ID to the plugin and prevent it from being created again
-        $this->plugin->skip($owner, [Plugin::SKIP_BEFORE]);
-        $app->user = $app->repo("User")->find($job->user);
 
-        $definition = $app->getRegisteredFileGroup($owner->controllerId, $file->group);
-        
-        if ($definition->unique && ($current_file = $owner->files[$file->group] ?? null)) {
+        $definition = $app->getRegisteredFileGroup($owner->controllerId, $file_data["group"]);
+
+        if ($definition->unique && ($current_file = $owner->files[$file_data["group"]] ?? null)) {
+            $plugin->skip($file, [Plugin::SKIP_AFTER]);
             $current_file->delete(true);
         }
+        
+        // inform network ID to the plugin and prevent it from being created again
+        $app->hook("entity(<<Agent|Event|Space>>).file(<<*>>).insert:after", function () use($file, $network_file_id) {
+            if ($this == $file) {
+                $value = $this->owner->network__file_ids ?: (object)[];
+                $value->$network_file_id = $this->id;
+                $this->owner->network__file_ids = $value;
+            }
+            
+        }, -10);
 
+        $plugin->skip($file, [Plugin::SKIP_REVISION]);
         $file->save(true);
+        
         return true;
     }
 
@@ -107,6 +131,6 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
                                    string $interval_string, int $iterations)
     {
         // local nodeSlug doesn't matter in production but is requird in a shared database development setup
-        return "{$this->plugin->nodeSlug}:{$data["networkID"]}->download";
+        return "{$this->plugin->nodeSlug}:{$data["owner"]}->downloads";
     }
 }

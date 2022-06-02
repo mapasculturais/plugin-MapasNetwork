@@ -29,7 +29,7 @@ class SyncEntityJobType extends \MapasCulturais\Definitions\JobType
         if (in_array($action, [Plugin::ACTION_RESYNC, Plugin::ACTION_SCOPED])) {
             $groups = array_keys($app->getRegisteredFileGroupsByEntity($class_name));
             $data = $this->plugin->serializeAttachments($entity, "files", $groups, $data);
-            $groups = array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity($class_name)), $this->plugin->allowedMetaListGroups);
+            $groups = array_keys($app->getRegisteredMetaListGroupsByEntity($class_name));
             $data = $this->plugin->serializeAttachments($entity, "metalists", $groups, $data);
         }
         $data = [

@@ -25,16 +25,16 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         $node = $job->node;
 
         $user = $node->user;
-        $allowed_metalist_groups = $this->plugin->allowedMetaListGroups;
+        
         $file_groups = [
             "agent" => array_keys($app->getRegisteredFileGroupsByEntity(Agent::class)),
             "event" => array_keys($app->getRegisteredFileGroupsByEntity(Event::class)),
             "space" => array_keys($app->getRegisteredFileGroupsByEntity(Space::class)),
         ];
         $metalist_groups = [
-            "agent" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Agent::class)), $allowed_metalist_groups),
-            "event" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Event::class)), $allowed_metalist_groups),
-            "space" => array_intersect(array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)), $allowed_metalist_groups),
+            "agent" => array_keys($app->getRegisteredMetaListGroupsByEntity(Agent::class)),
+            "event" => array_keys($app->getRegisteredMetaListGroupsByEntity(Event::class)),
+            "space" => array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)),
         ];
         $map_ids = function ($entity) { return $entity->id; };
         $map_serialize = function ($entity) use ($file_groups, $metalist_groups) {
