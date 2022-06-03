@@ -394,6 +394,7 @@ class Node extends \MapasCulturais\Controller
         ];
         if (!in_array($class_name, $classes)) {
             // @todo arrumar esse throw
+            Plugin::log("TENTANDO CRIAR ENTIDADE DO TIPO $class_name");
             throw new PermissionDenied($app->user, $app->user, "create");
         }
         $node = $this->getRequestOriginNode();
@@ -490,13 +491,13 @@ class Node extends \MapasCulturais\Controller
         if(is_array($space_entity)) { 
             $space_entity = $this->plugin->resolveVenue($space_entity, $node);
         }
-        $data["space"] = "@entity:{$space_entity->network__id}";
         if ($event && $space_entity) {
+            $data["space"] = "@entity:{$space_entity->network__id}";
             $data = $this->plugin->unserializeEntity($data);
             $plugin = $this->plugin;
             Plugin::sudo(function () use ($class_name, $data, $event, $network_id, $node, $plugin) {
-                $ids_map = $event->network__occurrence_ids ?: [];
-                $ids_map[$network_id] = Plugin::UNKNOWN_ID;
+                $ids_map = $event->network__occurrence_ids ?: (object) [];
+                $ids_map->$network_id = Plugin::UNKNOWN_ID;
                 $event->network__occurrence_ids = $ids_map;
                 $plugin->createEntity($class_name, $network_id, $data, $node);
                 return;
@@ -544,6 +545,7 @@ class Node extends \MapasCulturais\Controller
             $owner->network__file_ids = $owner->network__file_ids ?: (object) [];
             if (isset($owner->network__file_ids->$network_id) ||
                 in_array($revision_id, (array)$owner->network__file_revisions)) {
+                Plugin::log("FILE $network_id $revision_id already exists");
                 $this->json("$network_id $revision_id already exists");
                 return;
             }
@@ -600,14 +602,15 @@ class Node extends \MapasCulturais\Controller
             if (isset($_netids->$network_id) ||
                 in_array($revision_id, $owner->network__metalist_revisions)) {
                 Plugin::log("METALIST $network_id $revision_id already exists");
-
                 $this->json("$network_id $revision_id already exists");
                 return;
             }
 
-            $revisions = $owner->network__metalist_revisions ?: [];
-            $revisions[] = $revision_id;
-            $owner->network__metalist_revisions = $revisions;
+            if($revision_id){
+                $revisions = $owner->network__metalist_revisions ?: [];
+                $revisions[] = $revision_id;
+                $owner->network__metalist_revisions = $revisions;
+            }
             
             // create the item and associate it to the owner
             $new_item = new $class_name();
@@ -1162,7 +1165,7 @@ class Node extends \MapasCulturais\Controller
         $file_groups = array_keys($app->getRegisteredFileGroupsByEntity($entity));
 
         $revisions = (array) ($entity->network__file_revisions ?: []);
-        $entity->network__file_revisions = array_unique(array_merge($revisions, $foreign_entity['network__file_revisions']));
+        $entity->network__file_revisions = array_unique(array_merge($revisions, $foreign_entity['network__file_revisions'] ?? []));
         $entity->save(true);
 
 
@@ -1180,7 +1183,7 @@ class Node extends \MapasCulturais\Controller
             }
             
             if (isset($group_data["id"])) {
-                $network_file_id = array_search($group_data['id'], $foreign_entity['network__file_ids']);
+                $network_file_id = array_search($group_data['id'], $foreign_entity['network__file_ids'] ?? []);
                 $this->enqueueResyncDownload($node, $entity, $network_file_id, $foreign_entity, $group_data);
             } else {
                 foreach ($group_data as $file) {
@@ -1191,7 +1194,7 @@ class Node extends \MapasCulturais\Controller
                     })) > 0) {
                         continue;
                     }
-                    $network_file_id = array_search($file["id"], $foreign_entity['network__file_ids']);
+                    $network_file_id = array_search($file["id"], $foreign_entity['network__file_ids'] ?? []);
                     $this->enqueueResyncDownload($node, $entity, $network_file_id, $foreign_entity, $file);
                 }
             }
@@ -1209,7 +1212,7 @@ class Node extends \MapasCulturais\Controller
             }
             
             $revisions = (array) ($entity->network__metalist_revisions ?: []);
-            $entity->network__metalist_revisions = array_unique(array_merge($revisions, $foreign_entity['network__metalist_revisions']));
+            $entity->network__metalist_revisions = array_unique(array_merge($revisions, $foreign_entity['network__metalist_revisions'] ?? []));
             
             foreach ($group_data as $list_item) {
                 if (count(array_filter(($entity->metalists[$group] ?? []), function ($item) use ($list_item) {
@@ -1219,7 +1222,7 @@ class Node extends \MapasCulturais\Controller
                 })) > 0) {
                     continue;
                 }
-                $network_id = array_search($list_item["id"], $foreign_entity['network__metalist_ids']);
+                $network_id = array_search($list_item["id"], $foreign_entity['network__metalist_ids'] ?? []);
                 
                 $new_item = new MetaList;
                 $new_item->owner = $entity;

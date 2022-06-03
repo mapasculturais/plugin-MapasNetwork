@@ -63,6 +63,12 @@ class Plugin extends \MapasCulturais\Plugin
      */
     protected $skipList = [];
 
+    /**
+     * Instância do plugin
+     * @var Plugin
+     */
+    static $instance;
+
     function __construct(array $config = [])
     {
         $app = App::i();
@@ -80,6 +86,7 @@ class Plugin extends \MapasCulturais\Plugin
             'nodes-verification-interval' => '1 week'
         ];
 
+        self::$instance = $this;
         parent::__construct($config);
     }
 
@@ -90,12 +97,37 @@ class Plugin extends \MapasCulturais\Plugin
         /** @var Plugin $plugin */
         $plugin = $this;
 
-        /**
-         * Certifica-se de que o cache dos filtros existam no momento do login
-         */
+        
         $app->hook("auth.login", function () use ($plugin) {
+            /**
+             * Certifica-se de que o cache dos filtros existam no momento do login
+             */
             foreach($plugin->config['nodes'] as $url) {
                 self::getNodeFilters($url);
+            }
+
+            /**
+             * Inicializa os metadados das entidaes já existentes
+             */
+            $app = App::i();
+            $user = $app->user;
+            if (!$user->profile->network__id) {
+                foreach($user->agents as $entity) {
+                    Plugin::ensureNetworkID($entity);
+                    $entity->save();
+                }
+
+                foreach($user->spaces as $entity) {
+                    Plugin::ensureNetworkID($entity);
+                    $entity->save();
+                }
+
+                foreach($user->events as $entity) {
+                    Plugin::ensureNetworkID($entity);
+                    $entity->save();
+                }
+
+                $app->em->flush();
             }
         });
 
@@ -132,7 +164,18 @@ class Plugin extends \MapasCulturais\Plugin
             /** @var MapasCulturais\Theme $this */
             $nodes = self::getCurrentUserNodes();
             
-            if (empty($nodes) || !($entity->network__id ?: null)) {
+            if (!($entity instanceof Entity)) {
+                $app = App::i();
+                $entity_map = [
+                    'events' => 'Event',
+                    'spaces' => 'Space',
+                    'agents' => 'Agent'
+                ];
+                $class = $entity_map[$this->controller->action];
+                $entity = $app->repo($class)->find($entity->id);
+            } 
+
+            if (empty($nodes) || !$entity->network__id) {
                 return;
             }
             if (($entity->network__sync_control ?: self::SYNC_ON) != self::SYNC_DELETED) {
@@ -715,6 +758,13 @@ class Plugin extends \MapasCulturais\Plugin
         ]);
         return;
     }
+
+    static function generateNetworkId(Entity $entity) {
+        $plugin = Plugin::$instance;
+        $entity_type = str_replace("MapasCulturais\\Entities\\", "", $entity->className);
+        $uid = uniqid("", true);
+        return "{$plugin->nodeSlug}:{$entity_type}:{$entity->id}:{$uid}";
+    }
     
     /**
      * Garante que uma entidade possua um network_id
@@ -728,24 +778,50 @@ class Plugin extends \MapasCulturais\Plugin
     static function ensureNetworkID(Entity $entity, Entity $owner=null, string $key=null)
     {
         if (!$key && !$entity->network__id) {
-            $uid = uniqid("", true);
-            $entity->network__id = "{$entity->networkRevisionPrefix}:{$uid}";
+            $entity->network__id = Plugin::generateNetworkId($entity);
             $entity->network__revisions = [$entity->network__id];
-            $entity->network__file_ids = (object)[];
-            $entity->network__file_revisions = [];
-            $entity->network__metalist_ids = (object)[];
-            $entity->network__metalist_revisions = [];
+            
+            /**
+             * Network Ids e revisões de Arquivos
+             */
+            $network__file_ids = [];
+            foreach($entity->files as $fs) {
+                if ($fs instanceof File) {
+                    $fs = [$fs];
+                }
 
+                foreach($fs as $file) {
+                    if($file->parent) {
+                        continue;
+                    }
+                    $network_file_id = Plugin::generateNetworkId($file);
+                    $network__file_ids[$network_file_id] = $file->id;
+                }
+            }
+            $entity->network__file_ids = (object) $network__file_ids;
+            $entity->network__file_revisions = empty($network__file_ids) ? 
+                                                [] : ["{$entity->network__id}::FILES"];
+
+            /**
+             * Network Ids e revisões de Metalists
+             */
+            $network__metalist_ids = [];
+            foreach($entity->metalists as $mls) {
+                foreach($mls as $metalist) {
+                    $network_metalist_id = Plugin::generateNetworkId($metalist);
+                    $network__metalist_ids[$network_metalist_id] = $metalist->id;
+                }
+            }
+            $entity->network__metalist_ids = (object) $network__metalist_ids;
+            $entity->network__metalist_revisions = empty($network__metalist_ids) ? 
+                                                        [] : ["{$entity->network__id}::METALISTS"];
+            
         } else if ($key && $owner) {
             $network_id = array_search($entity->id, (array) $owner->$key);
             if ($network_id === false) { // network__id doesn't exist or is pending association with the entity ID
                 $network_id = array_search(Plugin::UNKNOWN_ID, (array) $owner->$key);
                 if ($network_id === false) { // network__id doesn't exist at all
-                    // App::i()->log->debug("ensureNetworkID: creating new for special entity {$entity}");
-                    $plugin = App::i()->plugins["MapasNetwork"];
-                    $uid = uniqid("", true);
-                    $entity_id = str_replace("MapasCulturais\\Entities\\", "", "{$entity->className}:{$entity->id}");
-                    $network_id = "{$plugin->nodeSlug}:{$entity_id}:$uid";
+                    $network_id = Plugin::generateNetworkId($entity);
                 } else App::i()->log->debug("ensureNetworkID: special entity {$entity} using placeholder ID");
             } else {
                 // App::i()->log->debug("ensureNetworkID: special entity {$entity} already registered");
