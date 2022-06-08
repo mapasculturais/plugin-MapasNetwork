@@ -815,6 +815,19 @@ class Plugin extends \MapasCulturais\Plugin
             $entity->network__metalist_ids = (object) $network__metalist_ids;
             $entity->network__metalist_revisions = empty($network__metalist_ids) ? 
                                                         [] : ["{$entity->network__id}::METALISTS"];
+
+            if ($entity instanceof Event) {
+                $network__occurrence_ids = [];
+                foreach($entity->occurrences as $mls) {
+                    foreach($mls as $occurrence) {
+                        $network_occurrence_id = Plugin::generateNetworkId($occurrence);
+                        $network__occurrence_ids[$network_occurrence_id] = $occurrence->id;
+                    }
+                }
+                $entity->network__occurrence_ids = (object) $network__occurrence_ids;
+                $entity->network__occurrence_revisions = empty($network__occurrence_ids) ? 
+                                                            [] : ["{$entity->network__id}::OCCURRENCES"];
+            }
             
         } else if ($key && $owner) {
             $network_id = array_search($entity->id, (array) $owner->$key);
