@@ -94,6 +94,11 @@ class Plugin extends \MapasCulturais\Plugin
     {
         $app = App::i();
 
+        // hook selectors
+        $ENTITIES = 'Agent|Space|Event';
+        $ENTITIES_PLURAL = 'agents|events|spaces';
+        
+
         /** @var Plugin $plugin */
         $plugin = $this;
 
@@ -153,14 +158,14 @@ class Plugin extends \MapasCulturais\Plugin
         /**
          * Enfilera os asset para o switch de liga/desliga da sincronização
          */
-        $app->hook("GET(panel.<<agents|events|spaces>>):before", function () use ($app) {
+        $app->hook("GET(panel.<<$ENTITIES_PLURAL>>):before", function () use ($app) {
             if (empty(self::getCurrentUserNodes())) {
                 return;
             }
             Plugin::addPropagationUX($app->view);
         });
         
-        $app->hook("template(panel.<<agents|events|spaces>>.entity-actions):begin", function ($entity) {
+        $app->hook("template(panel.<<$ENTITIES_PLURAL>>.entity-actions):begin", function ($entity) {
             /** @var MapasCulturais\Theme $this */
             $nodes = self::getCurrentUserNodes();
             
@@ -185,7 +190,8 @@ class Plugin extends \MapasCulturais\Plugin
         $app->hook("GET(panel.<<*>>):before", function () use ($app) {
             $app->view->enqueueStyle("app", "mapas-network", "css/mapas-network.css");
         });
-        $app->hook("GET(<<agent|event|space>>.single):before", function () use ($app) {
+
+        $app->hook("GET(<<$ENTITIES>>.single):before", function () use ($app) {
             /** @var MapasCulturais\Controllers\EntityController $this */
             if (empty(self::getCurrentUserNodes())) {
                 return;
@@ -196,7 +202,7 @@ class Plugin extends \MapasCulturais\Plugin
                 "controllerId" => $this->id,
             ];
         });
-        $app->hook("template(<<agent|event|space>>.<<*>>.name):after", function () use ($app) {
+        $app->hook("template(<<$ENTITIES>>.<<*>>.name):after", function () use ($app) {
             /** @var MapasCulturais\Theme $this */
             $entity = $this->controller->requestedEntity;
             if ($app->mode == APPMODE_DEVELOPMENT) {
@@ -265,7 +271,7 @@ class Plugin extends \MapasCulturais\Plugin
         /**
          * Getter networkRevisionPrefix que retorna o prefixo dos ids das revisões da entidade
          */
-        $app->hook("entity(<<Agent|Event|Space>>).get(networkRevisionPrefix)", function (&$value) use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).get(networkRevisionPrefix)", function (&$value) use ($plugin) {
             /** @var Entity $this */
             $slug = $plugin->nodeSlug;
             $entity_id = str_replace("MapasCulturais\\Entities\\", "", (string) $this);
@@ -289,7 +295,7 @@ class Plugin extends \MapasCulturais\Plugin
         /**
          * Atualização das entidades
          */
-        $app->hook("entity(<<Agent|Event|Space>>).update:before,entity(<<Agent|Event|Space>>).meta(<<*>>).update:before,-entity(<<Agent|Event|Space>>).meta(network<<*>>).update:before", function () use ($plugin, $app) {
+        $app->hook("entity(<<$ENTITIES>>).update:before,entity(<<$ENTITIES>>).meta(<<*>>).update:before,-entity(<<$ENTITIES>>).meta(network<<*>>).update:before", function () use ($plugin, $app) {
             /** @var Entity $entity */
             if(strpos($this->className,'Meta') > 0 ) {
                 $entity = $this->owner;
@@ -305,7 +311,7 @@ class Plugin extends \MapasCulturais\Plugin
             $revisions[] = "{$entity->networkRevisionPrefix}:{$uid}";
             $entity->network__revisions = $revisions;
         });
-        $app->hook("entity(<<Agent|Event|Space>>).update:finish,entity(<<Agent|Event|Space>>).meta(<<*>>).update:after,-entity(<<Agent|Event|Space>>).meta(network<<*>>).update:after", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).update:finish,entity(<<$ENTITIES>>).meta(<<*>>).update:after,-entity(<<$ENTITIES>>).meta(network<<*>>).update:after", function () use ($plugin) {
             /** @var Entity $entity */
             if(strpos($this->className,'Meta') > 0 ) {
                 $entity = $this->owner;
@@ -321,7 +327,7 @@ class Plugin extends \MapasCulturais\Plugin
         /**
          * Deleção das entidades
          */
-        $app->hook("entity(<<Agent|Event|Space>>).delete:after", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).delete:after", function () use ($plugin) {
             /** @var Entity $this */
             if (($this->network__sync_control ?: self::SYNC_ON) != self::SYNC_ON) {
                 $this->network__sync_control = self::SYNC_DELETED;
@@ -329,7 +335,7 @@ class Plugin extends \MapasCulturais\Plugin
                 $this->save();
             }
         });
-        $app->hook("entity(<<Agent|Event|Space>>).undelete:after", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).undelete:after", function () use ($plugin) {
             /** @var Entity $this */
             if (($this->network__sync_control ?: self::SYNC_ON) == self::SYNC_DELETED) {
                 $this->network__sync_control = self::SYNC_AUTO_OFF;
@@ -342,7 +348,7 @@ class Plugin extends \MapasCulturais\Plugin
         /**
          * Dispara a sincronização da entidade quando a sincronização é reativada para a entidade
          */
-        $app->hook("entity(<<agent|event|space>>).meta(network__sync_control).update:after", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).meta(network__sync_control).update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\Metadata $this */
             if ($this->value != self::SYNC_ON) {
                 return;
@@ -462,7 +468,7 @@ class Plugin extends \MapasCulturais\Plugin
          * Sincronização de MetaLists
          * =====================================
          */
-        $app->hook("entity(<<Agent|Event|Space>>).metalist(<<*>>).insert:after", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).metalist(<<*>>).insert:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
             if ($plugin->shouldSkip($this, self::SKIP_AFTER)) {
                 return;
@@ -480,7 +486,7 @@ class Plugin extends \MapasCulturais\Plugin
         
             $plugin->syncMetaList($this, "createdMetaList");
         });
-        $app->hook("entity(<<Agent|Event|Space>>).metalist(<<*>>).update:after", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).metalist(<<*>>).update:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
             if ($plugin->shouldSkip($this, self::SKIP_AFTER)) {
                 return;
@@ -498,7 +504,7 @@ class Plugin extends \MapasCulturais\Plugin
 
             $plugin->syncMetaList($this, "updatedMetaList");
         });
-        $app->hook("entity(<<Agent|Event|Space>>).metalist(<<*>>).remove:before", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).metalist(<<*>>).remove:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\MetaList $this */
             if ($plugin->shouldSkip($this, self::SKIP_BEFORE)) {
                 return;
@@ -532,7 +538,7 @@ class Plugin extends \MapasCulturais\Plugin
          * =====================================
          */
 
-        $app->hook("entity(<<Agent|Event|Space>>).file(<<*>>).insert:after", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).file(<<*>>).insert:after", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\File $this */
             if ($plugin->shouldSkip($this, self::SKIP_AFTER)) {
                 return;
@@ -551,7 +557,7 @@ class Plugin extends \MapasCulturais\Plugin
             $plugin->syncFile($this, "createdFile");
         });
         /** @todo implementar sincronização de edições em arquivos. hoje o mapa não oferece interface para edição */
-        $app->hook("entity(<<Agent|Event|Space>>).file(<<*>>).remove:before", function () use ($plugin) {
+        $app->hook("entity(<<$ENTITIES>>).file(<<*>>).remove:before", function () use ($plugin) {
             /** @var \MapasCulturais\Entities\File $this */
             if ($plugin->shouldSkip($this, self::SKIP_BEFORE)) {
                 return;
@@ -835,7 +841,9 @@ class Plugin extends \MapasCulturais\Plugin
                 $network_id = array_search(Plugin::UNKNOWN_ID, (array) $owner->$key);
                 if ($network_id === false) { // network__id doesn't exist at all
                     $network_id = Plugin::generateNetworkId($entity);
-                } else App::i()->log->debug("ensureNetworkID: special entity {$entity} using placeholder ID");
+                } else {
+                    App::i()->log->debug("ensureNetworkID: special entity {$entity} using placeholder ID");
+                }
             } else {
                 // App::i()->log->debug("ensureNetworkID: special entity {$entity} already registered");
                 return false;
@@ -1425,13 +1433,10 @@ class Plugin extends \MapasCulturais\Plugin
         // use skips because we don't want to trigger hooks for these bookkeeping tasks
         $this->skip($occurrence->event, [self::SKIP_BEFORE, self::SKIP_AFTER]);
         $occurrence->event->save(true);
-        // Plugin::saveMetadata($occurrence->event, ["network__id", "network__occurrence_ids"]);
         $this->skip($occurrence->space, [self::SKIP_BEFORE, self::SKIP_AFTER]);
         $occurrence->space->save(true);
-        // Plugin::saveMetadata($occurrence->space, ["network__id"]);
         $this->skip($occurrence->space->owner, [self::SKIP_BEFORE, self::SKIP_AFTER]);
         $occurrence->space->owner->save(true);
-        // Plugin::saveMetadata($occurrence->space->owner, ["network__id"]);
         $this->syncEventOccurrence($occurrence, "createdEventOccurrence");
     }
 
