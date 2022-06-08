@@ -10,10 +10,8 @@ use MapasCulturais\ApiQuery;
 use MapasCulturais\Entity;
 use MapasCulturais\Entities\Agent;
 use MapasCulturais\Entities\Space;
-use MapasCulturais\Entities\Event;
 use MapasCulturais\Entities\File;
 use MapasCulturais\Entities\MetaList;
-use MapasCulturais\Entities\EventOccurrence;
 use MapasCulturais\Entities\Notification;
 use MapasNetwork\Entities\Node;
 use MapasSDK\MapasSDK;
@@ -34,7 +32,6 @@ class Plugin extends \MapasCulturais\Plugin
     const JOB_SLUG = "network__sync_entity";
     const JOB_SLUG_DELETION = "network__sync_entity_deletion";
     const JOB_SLUG_DOWNLOADS = "network__sync_download_files";
-    const JOB_SLUG_EVENT = "network__sync_event";
     const JOB_SLUG_FILES = "network__sync_entity_files";
     const JOB_SLUG_METALISTS = "network__sync_entity_metalists";
     const JOB_SLUG_BOOTSTRAP = "network__node_bootstrap";
@@ -95,8 +92,8 @@ class Plugin extends \MapasCulturais\Plugin
         $app = App::i();
 
         // hook selectors
-        $ENTITIES = 'Agent|Space|Event';
-        $ENTITIES_PLURAL = 'agents|events|spaces';
+        $ENTITIES = 'Agent|Space';
+        $ENTITIES_PLURAL = 'agents|spaces';
         
 
         /** @var Plugin $plugin */
@@ -123,11 +120,6 @@ class Plugin extends \MapasCulturais\Plugin
                 }
 
                 foreach($user->spaces as $entity) {
-                    Plugin::ensureNetworkID($entity);
-                    $entity->save();
-                }
-
-                foreach($user->events as $entity) {
                     Plugin::ensureNetworkID($entity);
                     $entity->save();
                 }
@@ -172,7 +164,6 @@ class Plugin extends \MapasCulturais\Plugin
             if (!($entity instanceof Entity)) {
                 $app = App::i();
                 $entity_map = [
-                    'events' => 'Event',
                     'spaces' => 'Space',
                     'agents' => 'Agent'
                 ];
@@ -359,109 +350,6 @@ class Plugin extends \MapasCulturais\Plugin
             }
         });
 
-        /**
-         * =====================================
-         * Sincronização de eventos
-         * Para eventos, deve ser observada as ocorrências, não o próprio evento
-         * =====================================
-         */
-        $app->hook("entity(EventOccurrence).insert:before", function () use ($plugin) {
-            /** @var EventOccurrence $this */
-            if (!$this->event || $plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
-                return;
-            }
-            Plugin::ensureNetworkID($this->event);
-            Plugin::ensureNetworkID($this->space);
-            Plugin::ensureNetworkID($this->space->owner);
-        });
-        $app->hook("entity(EventOccurrence).insert:after", function () use ($plugin) {
-            /** @var EventOccurrence $this */
-            if ($plugin->shouldSkip($this->event, self::SKIP_AFTER)) {
-                return;
-            }
-            if ($this->status == EventOccurrence::STATUS_PENDING) {
-                return; // do not sync pending occurrence
-            }
-            $plugin->registerEventOccurrence($this);
-        });
-        $app->hook("entity(EventOccurrence).remove:before", function () use ($plugin) {
-            /** @var EventOccurrence $this */
-            if ($plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
-                return;
-            }
-            if ($this->status == EventOccurrence::STATUS_PENDING) {
-                return; // this is a no-op since we never sync a pending occurrence
-            }
-            $ids = (array) $this->event->network__occurrence_ids;
-            $network_id = array_search($this->id, $ids);
-            unset($ids[$network_id]);
-            $this->event->network__occurrence_ids = $ids;
-            $revisions = (array) $this->event->network__occurrence_revisions;
-            unset($revisions[$network_id]);
-            $this->event->network__occurrence_revisions = $revisions;
-            // use skips because we don't want to trigger hooks for these bookkeeping tasks
-            $plugin->skip($this->event, [self::SKIP_BEFORE, self::SKIP_AFTER]);
-            // Plugin::saveMetadata($this->event, ["network__occurrence_ids", "network__occurrence_revisions"]);
-            $this->event->save(true);
-            $nodes = Plugin::getEntityNodes($this->event);
-            $is_descope = str_ends_with($_SERVER["REQUEST_URI"], "/descopedEventOccurrence");
-            foreach ($nodes as $node) {
-                $meta_key = $node->entityMetadataKey;
-                $meta_value = $this->event->$meta_key;
-                if (Plugin::checkNodeFilter($node, $this->space) || ($is_descope && $meta_value)) {
-                    App::i()->enqueueJob(self::JOB_SLUG_DELETION, [
-                        "syncAction" => $is_descope ? "descopedEventOccurrence" : "deletedEventOccurrence",
-                        "entity" => $this->jsonSerialize(),
-                        "node" => $node,
-                        "nodeSlug" => $node->slug,
-                        "networkID" => $network_id,
-                        "className" => $this->className,
-                        "ownerClassName" => $this->event->className,
-                        "ownerNetworkID" => $this->event->network__id,
-                        "group" => "occurrence",
-                        "revisions_key" => "network__occurrence_revisions",
-                        "revisions" => $revisions
-                    ]);
-                }
-            }
-        });
-        $app->hook("entity(EventOccurrence).update:before", function () use ($plugin) {
-            /** @var EventOccurrence $this */
-            if ($plugin->shouldSkip($this->event, self::SKIP_BEFORE)) {
-                return;
-            }
-            if ($this->status == EventOccurrence::STATUS_PENDING) {
-                return; // do not sync pending occurrence
-            }
-            $uid = uniqid("", true);
-            $revisions = (array) $this->event->network__occurrence_revisions ?: [];
-            $ids = (array) $this->event->network__occurrence_ids;
-            $network_id = array_search($this->id, $ids);
-            if (!isset($revisions[$network_id])) {
-                $revisions[$network_id] = [];
-            }
-            $revisions[$network_id][] = "{$this->event->networkRevisionPrefix}:{$uid}";
-            $this->event->network__occurrence_revisions = $revisions;
-            Plugin::ensureNetworkID($this->event);
-            $plugin->skip($this->event, [Plugin::SKIP_BEFORE]);
-            $this->event->save(true);
-        });
-        $app->hook("entity(EventOccurrence).update:after", function () use ($plugin) {
-            /** @var EventOccurrence $this */
-            if ($plugin->shouldSkip($this->event, self::SKIP_AFTER)) {
-                return;
-            }
-            if ($this->status == EventOccurrence::STATUS_PENDING) {
-                return; // do not sync pending occurrence
-            }
-            if ((array_search($this->id, ((array) $this->event->network__occurrence_ids ?: [])) == false)) {
-                $plugin->registerEventOccurrence($this); // this was a pending occurrence, treat as creation
-            } else {
-                $plugin->syncEventOccurrence($this, "updatedEventOccurrence");
-            }
-        });
-
-
 
         /**
          * =====================================
@@ -635,7 +523,6 @@ class Plugin extends \MapasCulturais\Plugin
             "default" => self::SYNC_ON
         ];
         $this->registerAgentMetadata("network__sync_control", $sync_control);
-        $this->registerEventMetadata("network__sync_control", $sync_control);
         $this->registerSpaceMetadata("network__sync_control", $sync_control);
         $revisions_metadata = [
             'label' => i::__('Lista das revisões da rede', 'mapas-network'),
@@ -643,14 +530,12 @@ class Plugin extends \MapasCulturais\Plugin
             'default' => []
         ];
         $this->registerAgentMetadata('network__revisions', $revisions_metadata);
-        $this->registerEventMetadata('network__revisions', $revisions_metadata);
         $this->registerSpaceMetadata('network__revisions', $revisions_metadata);
         $network_id_metadata = [
             'label' => i::__('Id da entidade na rede de mapas', 'mapas-network'),
             'type' => 'string',
         ];
         $this->registerAgentMetadata('network__id', $network_id_metadata);
-        $this->registerEventMetadata('network__id', $network_id_metadata);
         $this->registerSpaceMetadata('network__id', $network_id_metadata);
 
         /** 
@@ -663,7 +548,6 @@ class Plugin extends \MapasCulturais\Plugin
         ];
         $this->registerAgentMetadata("network__file_ids", $file_ids_metadata);
         $this->registerSpaceMetadata("network__file_ids", $file_ids_metadata);
-        $this->registerEventMetadata("network__file_ids", $file_ids_metadata);
 
         $file_revisions_metadata = [
             "label" => i::__("Listas de revisões dos arquivos na rede de Mapas", "mapas-network"),
@@ -672,7 +556,6 @@ class Plugin extends \MapasCulturais\Plugin
         ];
         $this->registerAgentMetadata("network__file_revisions", $file_revisions_metadata);
         $this->registerSpaceMetadata("network__file_revisions", $file_revisions_metadata);
-        $this->registerEventMetadata("network__file_revisions", $file_revisions_metadata);
 
         /** 
          * Metadados para controle da sincronização de metalists 
@@ -684,7 +567,6 @@ class Plugin extends \MapasCulturais\Plugin
         ];
         $this->registerAgentMetadata("network__metalist_ids", $metalist_ids_metadata);
         $this->registerSpaceMetadata("network__metalist_ids", $metalist_ids_metadata);
-        $this->registerEventMetadata("network__metalist_ids", $metalist_ids_metadata);
 
         $metalist_revisions_metadata = [
             "label" => i::__("Listas de revisões dos metalists na rede de Mapas", "mapas-network"),
@@ -693,22 +575,7 @@ class Plugin extends \MapasCulturais\Plugin
         ];
         $this->registerAgentMetadata("network__metalist_revisions", $metalist_revisions_metadata);
         $this->registerSpaceMetadata("network__metalist_revisions", $metalist_revisions_metadata);
-        $this->registerEventMetadata("network__metalist_revisions", $metalist_revisions_metadata);
 
-        /** 
-         * Metadados para controle da sincronização de ocorrência de eventos 
-         */
-        // similar to files and metalists, these are dictionaries keyed by the network__id
-        $this->registerEventMetadata("network__occurrence_ids", [
-            "label" => i::__("Ids das ocorrências na rede de Mapas", "mapas-network"),
-            "type" => "json",
-            "default" => (object)[]
-        ]);
-        $this->registerEventMetadata("network__occurrence_revisions", [
-            "label" => i::__("Listas de revisões das ocorrências na rede de Mapas", "mapas-network"),
-            "type" => "json",
-            "default" => []
-        ]);
         
         $this->registerSpaceMetadata("network__proxied_owner", [
             "label" => i::__("O network Id do proprietário original do espaço", "mapas-network"),
@@ -724,7 +591,6 @@ class Plugin extends \MapasCulturais\Plugin
         ]);
         // background jobs
         $app->registerJobType(new SyncEntityJobType(self::JOB_SLUG, $this));
-        $app->registerJobType(new SyncEventJobType(self::JOB_SLUG_EVENT, $this));
         $app->registerJobType(new SyncFileJobType(self::JOB_SLUG_FILES, $this));
         $app->registerJobType(new SyncMetaListJobType(self::JOB_SLUG_METALISTS, $this));
         $app->registerJobType(new SyncDeletionJobType(self::JOB_SLUG_DELETION, $this));
@@ -822,18 +688,6 @@ class Plugin extends \MapasCulturais\Plugin
             $entity->network__metalist_revisions = empty($network__metalist_ids) ? 
                                                         [] : ["{$entity->network__id}::METALISTS"];
 
-            if ($entity instanceof Event) {
-                $network__occurrence_ids = [];
-                foreach($entity->occurrences as $mls) {
-                    foreach($mls as $occurrence) {
-                        $network_occurrence_id = Plugin::generateNetworkId($occurrence);
-                        $network__occurrence_ids[$network_occurrence_id] = $occurrence->id;
-                    }
-                }
-                $entity->network__occurrence_ids = (object) $network__occurrence_ids;
-                $entity->network__occurrence_revisions = empty($network__occurrence_ids) ? 
-                                                            [] : ["{$entity->network__id}::OCCURRENCES"];
-            }
             
         } else if ($key && $owner) {
             $network_id = array_search($entity->id, (array) $owner->$key);
@@ -946,26 +800,7 @@ class Plugin extends \MapasCulturais\Plugin
     {
         if ($get_json_serialize && ($value instanceof Entity)) {
             $temp_value = $value->jsonSerialize();
-            if ($value instanceof EventOccurrence) {
-                $temp_value["event"] = $value->event;
-                $network_id = array_search($value->id, (array) ($value->event->network__occurrence_ids ?: []));
-                $temp_value["network__id"] = $network_id;
-
-                $__revisions = $value->event->network__occurrence_revisions;
-                $__id = $__revisions->$network_id ?? null;
-                if ($network_id && $__id) {
-                    $temp_value["network__revisions"] = $__revisions->$network_id;
-                }
-                
-                $temp_value["space"] = "@entity:{$value->space->network__id}";
-                
-            } else if (($value instanceof Event) && (!empty((array) $value->occurrences))) {
-                $temp_value["occurrences"] = [];
-                foreach ($value->occurrences as $occurrence) {
-                    $new_occurrence = $this->serializeEntity($occurrence);
-                    $temp_value["occurrences"][] = $new_occurrence;
-                }
-            }
+            
             $value = $temp_value;
         }
         if (($value instanceof Entity) && $value->usesMetadata()) {
@@ -1126,9 +961,7 @@ class Plugin extends \MapasCulturais\Plugin
             // algo como network_spcultura_entity_id
             $key = $node->entityMetadataKey;
             $this->registerAgentMetadata($key, $config);
-            $this->registerEventMetadata($key, $config);
             $this->registerSpaceMetadata($key, $config);
-            $this->registerMetadata(EventOccurrence::class, $key, $config);
         }
     }
 
@@ -1230,57 +1063,6 @@ class Plugin extends \MapasCulturais\Plugin
     }
 
     /**
-     * Cria o(s) Job(s) para sincronizar o evento / ocorrência de evento
-     * 
-     * @param EventOccurrence $occurrence 
-     * @param string $action 
-     * 
-     * @return void 
-     */
-    function syncEventOccurrence(EventOccurrence $occurrence, string $action)
-    {
-        $app = App::i();
-        $event = $occurrence->event;
-        $metadata_key = $this->entityMetadataKey;
-        $event->$metadata_key = $event->id;
-        // we don't use foreachEntityNodeDo here because filtering and looping have different references
-        $nodes = Plugin::getEntityNodes($occurrence->event);
-        foreach ($nodes as $node) {
-            if (Plugin::checkNodeFilter($node, $event->owner) || Plugin::checkNodeFilter($node, $occurrence->space)) {
-                $app->enqueueJob(self::JOB_SLUG, [
-                    "syncAction" => $action,
-                    "entity" => $occurrence,
-                    "node" => $node,
-                    "nodeSlug" => $node->slug
-                ]);
-            } else if ($action != "createdEventOccurrence") {
-                /* If an occurrence update changes the space such that it no
-                   longer passes the filter, any nodes that previously passed
-                   the filter need to know about it (i.e. delete). A different
-                   endpoint is used because propagation must take into account
-                   how this deletion came to be.
-                 */
-                $ids = (array) $event->network__occurrence_ids;
-                $network_id = array_search($occurrence->id, $ids);
-                $revisions = (array) $event->network__occurrence_revisions;
-                $app->enqueueJob(self::JOB_SLUG_DELETION, [
-                    "syncAction" => "descopedEventOccurrence",
-                    "entity" => $occurrence->jsonSerialize(),
-                    "node" => $node,
-                    "nodeSlug" => $node->slug,
-                    "networkID" => $network_id,
-                    "className" => $occurrence->className,
-                    "ownerClassName" => $event->className,
-                    "ownerNetworkID" => $event->network__id,
-                    "group" => "occurrence",
-                    "revisions_key" => "network__occurrence_revisions",
-                    "revisions" => $revisions
-                ]);
-            }
-        }
-    }
-
-    /**
      * Cria o(s) Job(s) para sincronizar o arquivo
      * 
      * @param File $file 
@@ -1348,23 +1130,6 @@ class Plugin extends \MapasCulturais\Plugin
             $entity->save(true);
             return;
         });
-        foreach (($data["occurrences"] ?? []) as $occurrence) {
-            $network_id = array_search($occurrence["id"], $data["network__occurrence_ids"]);
-            $this->skip($entity, [self::SKIP_BEFORE, self::SKIP_AFTER]);
-
-            $space = $this->unserializeEntity($occurrence["space"]);
-            if (is_null($space)) {
-                continue;
-            } else if (is_array($space)) {
-                $space = $this->resolveVenue($space, $origin);
-            }
-
-            $occurrence["space"] = $space;
-            $occurrence["event"] = $entity;
-
-            $this->createEntity(EventOccurrence::class, $network_id, $occurrence, $origin);
-            
-        }
         return $entity;
     }
 
@@ -1420,24 +1185,6 @@ class Plugin extends \MapasCulturais\Plugin
             }
         }
         return $responses;
-    }
-
-    /**
-     * 
-     * @param EventOccurrence $occurrence 
-     * @return void 
-     */
-    function registerEventOccurrence(EventOccurrence $occurrence)
-    {
-        Plugin::ensureNetworkID($occurrence, $occurrence->event, "network__occurrence_ids");
-        // use skips because we don't want to trigger hooks for these bookkeeping tasks
-        $this->skip($occurrence->event, [self::SKIP_BEFORE, self::SKIP_AFTER]);
-        $occurrence->event->save(true);
-        $this->skip($occurrence->space, [self::SKIP_BEFORE, self::SKIP_AFTER]);
-        $occurrence->space->save(true);
-        $this->skip($occurrence->space->owner, [self::SKIP_BEFORE, self::SKIP_AFTER]);
-        $occurrence->space->owner->save(true);
-        $this->syncEventOccurrence($occurrence, "createdEventOccurrence");
     }
 
     /**
@@ -1514,29 +1261,7 @@ class Plugin extends \MapasCulturais\Plugin
             if (($key == "status") && (($entity->network__sync_control ?: self::SYNC_ON) == self::SYNC_DELETED)) {
                 continue;
             }
-            if (($entity instanceof EventOccurrence)) {
-                $skip = false;
-                $prefix_length = 16; // "YYYY-mm-dd HH:ii"
-                switch ($key) {
-                    case "network__id": // network__id is kept in the event entity
-                        $skip = true;
-                        break;
-                    case "startsOn": // special conversion required
-                    case "endsOn":
-                    case "until":
-                        $prefix_length = 10; // "YYYY-mm-dd"
-                        // fall-through
-                    case "startsAt":
-                    case "endsAt":
-                        $entity->$key = substr($val["date"], 0, $prefix_length);
-                        $skip = true;
-                        break;
-                    default: break;
-                }
-                if ($skip) {
-                    continue;
-                }
-            }
+            
             $entity->$key = $val;
         }
     }

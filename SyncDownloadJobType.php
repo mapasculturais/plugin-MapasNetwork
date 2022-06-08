@@ -104,7 +104,7 @@ class SyncDownloadJobType extends \MapasCulturais\Definitions\JobType
         }
         
         // inform network ID to the plugin and prevent it from being created again
-        $app->hook("entity(<<Agent|Event|Space>>).file(<<*>>).insert:after", function () use($file, $network_file_id) {
+        $app->hook("entity(<<Agent|Space>>).file(<<*>>).insert:after", function () use($file, $network_file_id) {
             if ($this == $file) {
                 $value = $this->owner->network__file_ids ?: (object)[];
                 $value->$network_file_id = $this->id;

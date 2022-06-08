@@ -4,7 +4,6 @@ namespace MapasNetwork;
 use MapasCulturais\ApiQuery;
 use MapasCulturais\App;
 use MapasCulturais\Entities\Agent;
-use MapasCulturais\Entities\Event;
 use MapasCulturais\Entities\Job;
 use MapasCulturais\Entities\Space;
 
@@ -28,12 +27,10 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         
         $file_groups = [
             "agent" => array_keys($app->getRegisteredFileGroupsByEntity(Agent::class)),
-            "event" => array_keys($app->getRegisteredFileGroupsByEntity(Event::class)),
             "space" => array_keys($app->getRegisteredFileGroupsByEntity(Space::class)),
         ];
         $metalist_groups = [
             "agent" => array_keys($app->getRegisteredMetaListGroupsByEntity(Agent::class)),
-            "event" => array_keys($app->getRegisteredMetaListGroupsByEntity(Event::class)),
             "space" => array_keys($app->getRegisteredMetaListGroupsByEntity(Space::class)),
         ];
         $map_ids = function ($entity) { return $entity->id; };
@@ -72,33 +69,10 @@ class NodeBootstrapJobType extends \MapasCulturais\Definitions\JobType
         } else {
             $spaces = [];
         }
-        // events
-        $event_ids = array_map($map_ids, $user->getEnabledEvents());
-        if ($event_ids) {
-            $query = "IN(" . implode(",", $event_ids) . ")";
-            $event_ids = (new ApiQuery(Event::class, ["id" => $query]))->findIds();
-            $events = array_filter($app->repo("Event")->findBy(["id" => $event_ids]),
-                                   function ($event) use ($node) {
-                foreach ($event->occurrences as $occurrence) {
-                    if (Plugin::checkNodeFilter($node, $occurrence->space)) {
-                        Plugin::ensureNetworkID($occurrence, $event, "network__occurrence_ids");
-                        return true;
-                    }
-                }
-                return false;
-            });
-            foreach ($events as $event) {
-                $this->plugin->skip($event, [Plugin::SKIP_BEFORE, Plugin::SKIP_AFTER]);
-                Plugin::saveMetadata($event, ["network__occurrence_ids"]);
-            }
-        } else {
-            $events = [];
-        }
         // POST data
         $data = [
             "nodeSlug" => $this->plugin->nodeSlug,
             "agents" => array_map($map_serialize, $agents),
-            "events" => array_map($map_serialize, $events),
             "spaces" => array_map($map_serialize, $spaces),
         ];
         $node->api->apiPost("network-node/bootstrapSync", $data);
