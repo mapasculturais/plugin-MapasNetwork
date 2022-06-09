@@ -800,7 +800,7 @@ class Plugin extends \MapasCulturais\Plugin
     {
         if ($get_json_serialize && ($value instanceof Entity)) {
             $temp_value = $value->jsonSerialize();
-            
+            unset($temp_value['subsite']);
             $value = $temp_value;
         }
         if (($value instanceof Entity) && $value->usesMetadata()) {
