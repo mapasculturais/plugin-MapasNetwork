@@ -958,6 +958,7 @@ class Plugin extends \MapasCulturais\Plugin
                     $temp_value["occurrences"][] = $new_occurrence;
                 }
             }
+            unset($temp_value['subsite']);
             $value = $temp_value;
         }
         if (($value instanceof Entity) && $value->usesMetadata()) {
